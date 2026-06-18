@@ -12,5 +12,10 @@ module.exports = function registerSmtpEmailAccountNode(RED) {
     this.from = config.from;
   }
 
-  RED.nodes.registerType("smtp-email account", SmtpEmailAccountNode);
+  RED.nodes.registerType("smtp-email account", SmtpEmailAccountNode, {
+    credentials: {
+      username: { type: "text" },
+      password: { type: "password" },
+    },
+  });
 };

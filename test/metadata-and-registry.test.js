@@ -26,6 +26,19 @@ function getHtmlPathForRuntimePath(runtimePath) {
   return runtimePath.replace(/\.js$/, ".html");
 }
 
+function getEditorRegistrationSource(htmlSource, nodeType) {
+  const scriptPattern = /<script type="text\/javascript">(?<source>[\s\S]*?)<\/script>/;
+  const scriptMatch = htmlSource.match(scriptPattern);
+
+  assert.ok(scriptMatch, `editor script for ${nodeType} must exist`);
+  assert.match(
+    scriptMatch.groups.source,
+    new RegExp(`RED\\.nodes\\.registerType\\(\\s*${JSON.stringify(nodeType)}\\s*,`),
+  );
+
+  return scriptMatch.groups.source;
+}
+
 test("package.json contains the expected package metadata", () => {
   assert.equal(packageJson.name, "@compeso/node-red-contrib-smtp-email");
   assert.equal(packageJson.version, "0.1.0");
@@ -67,15 +80,15 @@ test("registered runtime files can be loaded and register their node types", () 
 
   for (const [nodeType, runtimePath] of Object.entries(registryNodes)) {
     const registerNode = require(path.join(rootDir, runtimePath));
-    const registeredTypes = new Map();
+    const registeredTypes = [];
     const createdNodes = [];
     const fakeRed = {
       nodes: {
         createNode(node, config) {
           createdNodes.push({ node, config });
         },
-        registerType(type, constructor) {
-          registeredTypes.set(type, constructor);
+        registerType(type, constructor, options) {
+          registeredTypes.push({ type, constructor, options });
         },
       },
     };
@@ -84,16 +97,25 @@ test("registered runtime files can be loaded and register their node types", () 
 
     registerNode(fakeRed);
 
-    assert.deepEqual([...registeredTypes.keys()], [nodeType]);
-    assert.equal(typeof registeredTypes.get(nodeType), "function");
+    assert.deepEqual(
+      registeredTypes.map((entry) => entry.type),
+      [nodeType],
+    );
+    assert.equal(typeof registeredTypes[0].constructor, "function");
 
-    const NodeConstructor = registeredTypes.get(nodeType);
-    const config = { name: "test node" };
+    const NodeConstructor = registeredTypes[0].constructor;
+    const config = {
+      name: "test node",
+      username: "test-user",
+      password: "test-password",
+    };
     const nodeInstance = new NodeConstructor(config);
 
     assert.equal(createdNodes.length, 1);
     assert.equal(createdNodes[0].node, nodeInstance);
     assert.equal(createdNodes[0].config, config);
+    assert.equal(nodeInstance.username, undefined);
+    assert.equal(nodeInstance.password, undefined);
   }
 });
 
@@ -104,11 +126,9 @@ test("runtime and editor files use matching Node-RED type names", () => {
     const runtimeSource = readProjectFile(runtimePath);
     const htmlPath = getHtmlPathForRuntimePath(runtimePath);
     const htmlSource = readProjectFile(htmlPath);
+    const editorRegistrationSource = getEditorRegistrationSource(htmlSource, nodeType);
 
     const runtimeRegisterPattern = new RegExp(
-      `RED\\.nodes\\.registerType\\(\\s*${JSON.stringify(nodeType)}\\s*,`,
-    );
-    const htmlRegisterPattern = new RegExp(
       `RED\\.nodes\\.registerType\\(\\s*${JSON.stringify(nodeType)}\\s*,`,
     );
     const templatePattern = new RegExp(
@@ -119,8 +139,74 @@ test("runtime and editor files use matching Node-RED type names", () => {
     );
 
     assert.match(runtimeSource, runtimeRegisterPattern);
-    assert.match(htmlSource, htmlRegisterPattern);
+    assert.match(
+      editorRegistrationSource,
+      new RegExp(`RED\\.nodes\\.registerType\\(\\s*${JSON.stringify(nodeType)}\\s*,`),
+    );
     assert.match(htmlSource, templatePattern);
     assert.match(htmlSource, helpPattern);
   }
+});
+
+test("smtp account credentials are declared as Node-RED credentials only", () => {
+  const registryNodes = getRegistryNodes();
+  const runtimePath = registryNodes["smtp-email account"];
+  const registerNode = require(path.join(rootDir, runtimePath));
+  const registeredTypes = [];
+  const fakeRed = {
+    nodes: {
+      createNode() {},
+      registerType(type, constructor, options) {
+        registeredTypes.push({ type, constructor, options });
+      },
+    },
+  };
+
+  registerNode(fakeRed);
+
+  assert.equal(registeredTypes.length, 1);
+  assert.deepEqual(registeredTypes[0].options, {
+    credentials: {
+      username: { type: "text" },
+      password: { type: "password" },
+    },
+  });
+});
+
+test("smtp send node does not declare credentials", () => {
+  const registryNodes = getRegistryNodes();
+  const runtimePath = registryNodes["smtp-email send"];
+  const registerNode = require(path.join(rootDir, runtimePath));
+  const registeredTypes = [];
+  const fakeRed = {
+    nodes: {
+      createNode() {},
+      registerType(type, constructor, options) {
+        registeredTypes.push({ type, constructor, options });
+      },
+    },
+  };
+
+  registerNode(fakeRed);
+
+  assert.equal(registeredTypes.length, 1);
+  assert.equal(registeredTypes[0].options, undefined);
+});
+
+test("smtp account editor keeps credentials out of defaults", () => {
+  const registryNodes = getRegistryNodes();
+  const htmlPath = getHtmlPathForRuntimePath(registryNodes["smtp-email account"]);
+  const htmlSource = readProjectFile(htmlPath);
+  const editorRegistrationSource = getEditorRegistrationSource(htmlSource, "smtp-email account");
+
+  assert.match(editorRegistrationSource, /credentials:\s*{\s*username:\s*{\s*type:\s*"text"\s*}/);
+  assert.match(editorRegistrationSource, /password:\s*{\s*type:\s*"password"\s*}/);
+  assert.match(htmlSource, /id="node-config-input-username"/);
+  assert.match(htmlSource, /id="node-config-input-password"/);
+
+  const defaultsMatch = editorRegistrationSource.match(/defaults:\s*{(?<defaults>[\s\S]*?)\n    },\n    credentials:/);
+
+  assert.ok(defaultsMatch, "account editor defaults should be followed by credentials");
+  assert.doesNotMatch(defaultsMatch.groups.defaults, /\busername\b/);
+  assert.doesNotMatch(defaultsMatch.groups.defaults, /\bpassword\b/);
 });
