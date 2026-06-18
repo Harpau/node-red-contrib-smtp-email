@@ -1,0 +1,41 @@
+{
+  "name": "@compeso/node-red-contrib-smtp-email",
+  "version": "0.1.0",
+  "description": "SMTP email send node for Node-RED.",
+  "type": "commonjs",
+  "files": [
+    "nodes",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": [
+    "node-red",
+    "smtp",
+    "email",
+    "mail"
+  ],
+  "engines": {
+    "node": ">=22.0.0",
+    "node-red": ">=4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Harpau/node-red-contrib-smtp-email.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Harpau/node-red-contrib-smtp-email/issues"
+  },
+  "homepage": "https://github.com/Harpau/node-red-contrib-smtp-email#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "node-red": {
+    "nodes": {
+      "smtp-email account": "nodes/smtp-email-account.js",
+      "smtp-email send": "nodes/smtp-email-send.js"
+    }
+  }
+}
