@@ -4,6 +4,7 @@
   "description": "SMTP email send node for Node-RED.",
   "type": "commonjs",
   "files": [
+    "examples",
     "lib",
     "nodes",
     "README.md"

@@ -1,0 +1,98 @@
+[
+  {
+    "id": "flow-imap-forward-smtp",
+    "type": "tab",
+    "label": "Forward IMAP email via SMTP",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "imap-account-placeholder",
+    "type": "imap-email account",
+    "name": "imap account placeholder",
+    "host": "imap.example.invalid",
+    "port": 993,
+    "secure": true,
+    "rejectUnauthorized": true
+  },
+  {
+    "id": "smtp-account-placeholder",
+    "type": "smtp-email account",
+    "name": "smtp account placeholder",
+    "host": "smtp.example.invalid",
+    "port": 587,
+    "secure": false,
+    "rejectUnauthorized": true,
+    "from": "forwarder@example.invalid"
+  },
+  {
+    "id": "imap-email-in",
+    "type": "imap-email in",
+    "z": "flow-imap-forward-smtp",
+    "name": "imap email in",
+    "account": "imap-account-placeholder",
+    "wires": [
+      [
+        "set-forward-recipient"
+      ]
+    ]
+  },
+  {
+    "id": "set-forward-recipient",
+    "type": "change",
+    "z": "flow-imap-forward-smtp",
+    "name": "set forward recipient",
+    "rules": [
+      {
+        "t": "set",
+        "p": "to",
+        "pt": "msg",
+        "to": "recipient@example.invalid",
+        "tot": "str"
+      }
+    ],
+    "wires": [
+      [
+        "smtp-forward-send"
+      ]
+    ]
+  },
+  {
+    "id": "smtp-forward-send",
+    "type": "smtp-email send",
+    "z": "flow-imap-forward-smtp",
+    "name": "smtp email send",
+    "account": "smtp-account-placeholder",
+    "mode": "forward",
+    "wires": [
+      [
+        "imap-email-ack"
+      ],
+      [
+        "smtp-forward-error"
+      ]
+    ]
+  },
+  {
+    "id": "imap-email-ack",
+    "type": "imap-email ack",
+    "z": "flow-imap-forward-smtp",
+    "name": "imap email ack",
+    "account": "imap-account-placeholder",
+    "action": "delete",
+    "wires": []
+  },
+  {
+    "id": "smtp-forward-error",
+    "type": "debug",
+    "z": "flow-imap-forward-smtp",
+    "name": "smtp forward failed",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "smtpEmail.error",
+    "targetType": "msg",
+    "wires": []
+  }
+]

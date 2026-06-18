@@ -56,6 +56,7 @@ test("package.json contains the expected package metadata", () => {
   assert.equal(packageJson.bugs.url, "https://github.com/Harpau/node-red-contrib-smtp-email/issues");
   assert.equal(packageJson.publishConfig.access, "public");
 
+  assert.ok(packageJson.files.includes("examples"));
   assert.ok(packageJson.files.includes("nodes"));
   assert.ok(packageJson.files.includes("lib"));
   assert.ok(packageJson.files.includes("README.md"));
