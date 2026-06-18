@@ -140,6 +140,130 @@ test("smtp send node sends planned mail through an injected transport", async ()
     rejected: [],
     response: "250 queued",
   });
+  assert.equal(msg.smtpEmail.error, undefined);
+  assert.equal(msg.imap.ackToken, ackToken);
+});
+
+test("smtp send node sends compose cc bcc reply-to html and attachments", async () => {
+  const attachment = { filename: "report.txt", content: "report" };
+  let capturedMailOptions;
+  const node = createSendNode({
+    accountNode: {
+      host: "smtp.example.invalid",
+      port: 587,
+      from: "sender@example.invalid",
+    },
+    transportFactory() {
+      return {
+        async sendMail(mailOptions) {
+          capturedMailOptions = mailOptions;
+
+          return {
+            messageId: "message-id",
+            accepted: ["recipient@example.invalid"],
+            rejected: [],
+            response: "250 queued",
+          };
+        },
+        close() {},
+      };
+    },
+  });
+  const msg = {
+    to: "recipient@example.invalid",
+    cc: "copy@example.invalid",
+    bcc: "hidden@example.invalid",
+    replyTo: "reply@example.invalid",
+    subject: "Compose subject",
+    payload: "Plain body",
+    html: "<p>HTML body</p>",
+    attachments: [attachment],
+  };
+
+  const { sentMessages, doneCalls } = await runInput(node, msg);
+
+  assert.deepEqual(capturedMailOptions, {
+    to: "recipient@example.invalid",
+    cc: "copy@example.invalid",
+    bcc: "hidden@example.invalid",
+    replyTo: "reply@example.invalid",
+    subject: "Compose subject",
+    html: "<p>HTML body</p>",
+    attachments: [attachment],
+    from: "sender@example.invalid",
+    text: "Plain body",
+  });
+  assert.equal(capturedMailOptions.attachments[0], attachment);
+  assert.deepEqual(sentMessages, [[msg, null]]);
+  assert.deepEqual(doneCalls, [undefined]);
+  assert.equal(msg.smtpEmail.error, undefined);
+});
+
+test("smtp send node forwards structured mail with cc bcc reply-to and attachments", async () => {
+  const ackToken = { id: "ack-token" };
+  const attachment = { filename: "forwarded.txt", content: "forwarded" };
+  let capturedMailOptions;
+  const node = createSendNode({
+    mode: "forward",
+    accountNode: {
+      host: "smtp.example.invalid",
+      port: 587,
+      from: "forwarder@example.invalid",
+    },
+    transportFactory() {
+      return {
+        async sendMail(mailOptions) {
+          capturedMailOptions = mailOptions;
+
+          return {
+            messageId: "forward-message-id",
+            accepted: ["new-recipient@example.invalid"],
+            rejected: [],
+            response: "250 queued",
+          };
+        },
+        close() {},
+      };
+    },
+  });
+  const msg = {
+    to: "new-recipient@example.invalid",
+    cc: "copy@example.invalid",
+    bcc: "hidden@example.invalid",
+    replyTo: "reply@example.invalid",
+    imap: { ackToken },
+    email: {
+      subject: "Original subject",
+      text: "Original text",
+      html: "<p>Original HTML</p>",
+      replyTo: "original-reply@example.invalid",
+      attachments: [attachment],
+    },
+  };
+
+  const { sentMessages, doneCalls } = await runInput(node, msg);
+
+  assert.deepEqual(capturedMailOptions, {
+    to: "new-recipient@example.invalid",
+    subject: "Fwd: Original subject",
+    cc: "copy@example.invalid",
+    bcc: "hidden@example.invalid",
+    replyTo: "reply@example.invalid",
+    from: "forwarder@example.invalid",
+    text: "Original text",
+    html: "<p>Original HTML</p>",
+    attachments: [attachment],
+  });
+  assert.equal(capturedMailOptions.attachments[0], attachment);
+  assert.deepEqual(sentMessages, [[msg, null]]);
+  assert.deepEqual(doneCalls, [undefined]);
+  assert.deepEqual(msg.smtpEmail, {
+    messageId: "forward-message-id",
+    accepted: ["new-recipient@example.invalid"],
+    rejected: [],
+    response: "250 queued",
+  });
+  assert.equal(msg.smtpEmail.error, undefined);
   assert.equal(msg.imap.ackToken, ackToken);
 });
 
@@ -169,6 +293,7 @@ test("smtp send node routes planning errors to the failure output only", async (
 
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(sentMessages, [[null, msg]]);
+  assert.equal(sentMessages.length, 1);
   assert.deepEqual(doneCalls, [undefined]);
   assert.match(msg.smtpEmail.error, /Missing msg\.to for email send/);
   assert.doesNotMatch(msg.smtpEmail.error, /test-password|test-user|smtp\.example\.invalid/);
@@ -209,8 +334,10 @@ test("smtp send node routes transport errors to the failure output with sanitize
 
   assert.equal(transportClosed, true);
   assert.deepEqual(sentMessages, [[null, msg]]);
+  assert.equal(sentMessages.length, 1);
   assert.deepEqual(doneCalls, [undefined]);
   assert.equal(msg.smtpEmail.error, "Login failed for [redacted] using [redacted] at [redacted]");
+  assert.doesNotMatch(msg.smtpEmail.error, /test-password|test-user|smtp\.example\.invalid/);
   assert.equal(msg.imap.ackToken, ackToken);
 });
 
