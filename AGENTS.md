@@ -58,6 +58,15 @@ Zweck:
 - Durchreichen von `msg.imap.ackToken` ohne Veraenderung
 - Ausgabe von Versandmetadaten in `msg.smtpEmail`
 
+Message mode:
+
+- compose from msg fields
+- forward incoming email
+
+Im Modus `compose from msg fields` erstellt der Node eine neue E-Mail aus den konfigurierten Feldern und den eingehenden `msg`-Eigenschaften.
+
+Im Modus `forward incoming email` erstellt der Node eine Weiterleitung aus einer bereits empfangenen E-Mail. Dieser Modus soll besonders einfach mit `imap email in` zusammenspielen. Der Nutzer soll im einfachsten Fall nur den neuen Empfaenger setzen muessen, zum Beispiel `msg.to`.
+
 Eingabefelder:
 
 - `msg.to`
@@ -69,6 +78,16 @@ Eingabefelder:
 - `msg.payload`
 - `msg.html`
 - `msg.attachments`
+
+Forwarding-Regeln:
+
+- `msg.to` bestimmt den neuen Empfaenger.
+- `msg.cc` und `msg.bcc` duerfen optional neue Kopie-Empfaenger bestimmen.
+- `msg.from` darf optional den Absender ueberschreiben, ansonsten wird die Default-Absenderadresse des SMTP-Accounts verwendet.
+- `msg.subject` darf optional den Weiterleitungsbetreff ueberschreiben.
+- Wenn kein Betreff gesetzt ist, soll der Node fuer Weiterleitungen einen sinnvollen Standard wie `Fwd: <original subject>` bilden.
+- Der Originalinhalt darf aus einer vom IMAP-Paket gelieferten, dokumentierten Message-Struktur gelesen werden, aber das SMTP-Paket darf keine direkte Laufzeitabhaengigkeit vom IMAP-Paket haben.
+- Falls die empfangene Message keine ausreichend strukturierte Mail enthaelt, muss der Node mit einer klaren Fehlermeldung abbrechen.
 
 Ausgabe bei Erfolg:
 
@@ -141,6 +160,8 @@ Bei fehlgeschlagenem Versand darf die Message nicht versehentlich an den Ack-Pfa
 - `smtp email send` darf `msg.imap` nicht entfernen oder ueberschreiben.
 - `smtp email send` darf `msg.imap.ackToken` nicht veraendern.
 - Versandmetadaten des SMTP-Pakets gehoeren unter `msg.smtpEmail`.
+- Der Node darf bestehende Nutzdaten nur dort veraendern, wo es fuer den dokumentierten Versandmodus erforderlich ist.
+- Der Forwarding-Modus muss so gestaltet sein, dass `imap email in -> smtp email send -> imap email ack` ohne zusaetzliche Glue-Logik moeglich ist, sobald `msg.to` gesetzt wurde.
 - Bei erfolgreichem Versand wird die urspruengliche Message an Ausgang 1 weitergegeben.
 - Bei fehlgeschlagenem Versand wird die Message an Ausgang 2 weitergegeben oder per Node-RED-Fehlerbehandlung gemeldet.
 - Der Fehlerpfad darf nicht versehentlich einen nachgeschalteten `imap email ack` Node triggern.
@@ -181,6 +202,23 @@ Tests muessen insbesondere abdecken:
 - Attachments
 - CC, BCC und Reply-To
 - keine Zugangsdaten in Fehlern oder Logs
+
+## Umsetzungs-Roadmap
+
+Die Entwicklung soll in kleinen, reviewbaren Schritten erfolgen:
+
+1. `package.json` mit Metadaten, Node.js >=22.0.0, Node-RED >=4.0.0 und Node-RED-Registry fuer `smtp-email account` und `smtp-email send` anlegen.
+2. Minimale Node-Dateien fuer `smtp-email account` und `smtp-email send` anlegen, sodass Node-RED die Typen laden kann.
+3. Tests fuer package.json-Metadaten, Registry, JS-/HTML-Typkonsistenz und ladbare Node-Dateien ergaenzen.
+4. SMTP-Account-Credentials sicher ueber Node-RED-Credentials modellieren.
+5. Send-Planung fuer `compose from msg fields` ohne echte SMTP-Verbindung testen.
+6. Send-Planung fuer `forward incoming email` testen, besonders mit unveraendertem `msg.imap.ackToken`.
+7. SMTP-Transport mit gemocktem oder testbarem Transport integrieren.
+8. Erfolgspfad, Fehlerpfad, Attachments, CC, BCC und Reply-To testen.
+9. Beispiel-Flow fuer `imap email in -> smtp email send -> imap email ack` in `examples` ergaenzen.
+10. README mit Installation, Konfiguration, Message-Modes, IMAP-Weiterleitung, Delivery-Semantik und Grenzen ausbauen.
+
+Der naechste konkrete Umsetzungspunkt nach diesem Architektur-Dokument ist Punkt 1: `package.json` mit Node-RED-Registry anlegen.
 
 ## Arbeitsweise fuer Codex
 
