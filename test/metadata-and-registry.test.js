@@ -87,6 +87,7 @@ test("registered runtime files can be loaded and register their node types", () 
       nodes: {
         createNode(node, config) {
           createdNodes.push({ node, config });
+          node.on = function onNodeEvent() {};
         },
         registerType(type, constructor, options) {
           registeredTypes.push({ type, constructor, options });

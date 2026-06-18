@@ -18,6 +18,9 @@
     "email",
     "mail"
   ],
+  "dependencies": {
+    "nodemailer": "^9.0.1"
+  },
   "engines": {
     "node": ">=22.0.0",
     "node-red": ">=4.0.0"
