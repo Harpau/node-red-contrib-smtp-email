@@ -1,0 +1,52 @@
+<script type="text/javascript">
+(function() {
+  RED.nodes.registerType("smtp-email account", {
+    category: "config",
+    defaults: {
+      name: { value: "" },
+      host: { value: "", required: true },
+      port: { value: 587, required: true, validate: RED.validators.number() },
+      secure: { value: false },
+      rejectUnauthorized: { value: true },
+      from: { value: "" }
+    },
+    label: function() {
+      return this.name || this.host || "smtp email account";
+    }
+  });
+})();
+</script>
+
+<script type="text/html" data-template-name="smtp-email account">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-host"><i class="fa fa-server"></i> Host</label>
+    <input type="text" id="node-config-input-host" placeholder="smtp.example.com">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-port"><i class="fa fa-plug"></i> Port</label>
+    <input type="number" id="node-config-input-port" min="1" max="65535">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-secure"><i class="fa fa-lock"></i> TLS</label>
+    <input type="checkbox" id="node-config-input-secure" style="display:inline-block; width:auto; vertical-align:top;">
+    <span>Use TLS from connection start</span>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-rejectUnauthorized"><i class="fa fa-certificate"></i> Certs</label>
+    <input type="checkbox" id="node-config-input-rejectUnauthorized" style="display:inline-block; width:auto; vertical-align:top;">
+    <span>Reject unauthorized certificates</span>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-from"><i class="fa fa-envelope"></i> From</label>
+    <input type="text" id="node-config-input-from" placeholder="sender@example.com">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="smtp-email account">
+  <p>Shared SMTP account configuration for <code>smtp email send</code> nodes.</p>
+  <p>Stores host, port, TLS settings, certificate validation and a default sender address.</p>
+</script>

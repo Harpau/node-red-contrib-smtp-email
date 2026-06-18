@@ -1,0 +1,45 @@
+<script type="text/javascript">
+(function() {
+  RED.nodes.registerType("smtp-email send", {
+    category: "network",
+    color: "#d8edf7",
+    defaults: {
+      name: { value: "" },
+      account: { value: "", type: "smtp-email account", required: true },
+      mode: { value: "compose", required: true }
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ["sent", "failed"],
+    icon: "font-awesome/fa-envelope",
+    paletteLabel: "smtp email send",
+    label: function() {
+      return this.name || "smtp email send";
+    }
+  });
+})();
+</script>
+
+<script type="text/html" data-template-name="smtp-email send">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-account"><i class="fa fa-server"></i> Account</label>
+    <input type="text" id="node-input-account">
+  </div>
+  <div class="form-row">
+    <label for="node-input-mode"><i class="fa fa-envelope"></i> Mode</label>
+    <select id="node-input-mode">
+      <option value="compose">compose from msg fields</option>
+      <option value="forward">forward incoming email</option>
+    </select>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="smtp-email send">
+  <p>Sends email through a configured <code>smtp email account</code>.</p>
+  <p>Input messages use fields such as <code>msg.to</code>, <code>msg.cc</code>, <code>msg.bcc</code>, <code>msg.from</code>, <code>msg.replyTo</code>, <code>msg.subject</code>, <code>msg.payload</code>, <code>msg.html</code> and <code>msg.attachments</code>.</p>
+  <p>Output 1 is reserved for successful sends. Output 2 is reserved for failed sends.</p>
+</script>
