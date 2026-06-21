@@ -62,11 +62,29 @@ test("IMAP forwarding example wires SMTP success to ack and failure away from ac
 
   assert.ok(Array.isArray(flow));
   assert.equal(nodesById.get("imap-email-in").type, "imap-email in");
-  assert.equal(nodesById.get("set-forward-recipient").type, "change");
   assert.equal(smtpSend.type, "smtp-email send");
-  assert.equal(smtpSend.mode, "forward");
+  assert.equal(Object.prototype.hasOwnProperty.call(smtpSend, "mode"), false);
+  assert.equal(smtpSend.toSource, "str");
+  assert.equal(smtpSend.toValue, "recipient@example.invalid");
+  assert.equal(smtpSend.ccSource, "str");
+  assert.equal(smtpSend.ccValue, "");
+  assert.equal(smtpSend.bccSource, "str");
+  assert.equal(smtpSend.bccValue, "");
+  assert.equal(smtpSend.fromSource, "str");
+  assert.equal(smtpSend.fromValue, "");
+  assert.equal(smtpSend.replyToSource, "msg");
+  assert.equal(smtpSend.replyToValue, "email.header.reply-to");
+  assert.equal(smtpSend.subjectSource, "msg");
+  assert.equal(smtpSend.subjectValue, "email.topic");
+  assert.equal(smtpSend.textSource, "msg");
+  assert.equal(smtpSend.textValue, "email.text");
+  assert.equal(smtpSend.htmlSource, "msg");
+  assert.equal(smtpSend.htmlValue, "email.html");
+  assert.equal(smtpSend.attachmentsSource, "msg");
+  assert.equal(smtpSend.attachmentsValue, "email.attachments");
   assert.equal(nodesById.get("imap-email-ack").type, "imap-email ack");
 
+  assert.deepEqual(nodesById.get("imap-email-in").wires, [["smtp-forward-send"]]);
   assert.deepEqual(smtpSend.wires, [["imap-email-ack"], ["smtp-forward-error"]]);
   assert.equal(canReachNodeType(smtpSend.wires[0], nodesById, "imap-email ack"), true);
   assert.equal(canReachNodeType(smtpSend.wires[1], nodesById, "imap-email ack"), false);

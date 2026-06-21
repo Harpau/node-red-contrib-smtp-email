@@ -1,6 +1,6 @@
 "use strict";
 
-const { buildMailOptions } = require("../lib/mail-options");
+const { MAIL_FIELDS, buildMailOptions } = require("../lib/mail-options");
 const { createSmtpTransport, sanitizeErrorMessage } = require("../lib/smtp-transport");
 
 function getErrorSecrets(account) {
@@ -32,6 +32,14 @@ function closeTransport(transport) {
   }
 }
 
+function getFieldConfig(config) {
+  return MAIL_FIELDS.reduce((fieldConfig, field) => {
+    fieldConfig[`${field}Source`] = config[`${field}Source`];
+    fieldConfig[`${field}Value`] = config[`${field}Value`];
+    return fieldConfig;
+  }, {});
+}
+
 module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
   function SmtpEmailSendNode(config) {
     RED.nodes.createNode(this, config);
@@ -40,7 +48,7 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
 
     this.name = config.name;
     this.account = config.account;
-    this.mode = config.mode || "compose";
+    this.fieldConfig = getFieldConfig(config);
     this.buildMailOptions = buildMailOptions;
 
     this.on("input", async function handleInput(msg, send, done) {
@@ -55,9 +63,9 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
         }
 
         const mailOptions = buildMailOptions({
-          mode: node.mode,
           msg,
           account: accountNode,
+          fieldConfig: node.fieldConfig,
         });
         const transport = createSmtpTransport({
           account: accountNode,

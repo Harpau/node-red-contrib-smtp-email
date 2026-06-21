@@ -33,26 +33,6 @@
     "account": "imap-account-placeholder",
     "wires": [
       [
-        "set-forward-recipient"
-      ]
-    ]
-  },
-  {
-    "id": "set-forward-recipient",
-    "type": "change",
-    "z": "flow-imap-forward-smtp",
-    "name": "set forward recipient",
-    "rules": [
-      {
-        "t": "set",
-        "p": "to",
-        "pt": "msg",
-        "to": "recipient@example.invalid",
-        "tot": "str"
-      }
-    ],
-    "wires": [
-      [
         "smtp-forward-send"
       ]
     ]
@@ -63,7 +43,24 @@
     "z": "flow-imap-forward-smtp",
     "name": "smtp email send",
     "account": "smtp-account-placeholder",
-    "mode": "forward",
+    "toSource": "str",
+    "toValue": "recipient@example.invalid",
+    "ccSource": "str",
+    "ccValue": "",
+    "bccSource": "str",
+    "bccValue": "",
+    "fromSource": "str",
+    "fromValue": "",
+    "replyToSource": "msg",
+    "replyToValue": "email.header.reply-to",
+    "subjectSource": "msg",
+    "subjectValue": "email.topic",
+    "textSource": "msg",
+    "textValue": "email.text",
+    "htmlSource": "msg",
+    "htmlValue": "email.html",
+    "attachmentsSource": "msg",
+    "attachmentsValue": "email.attachments",
     "wires": [
       [
         "imap-email-ack"

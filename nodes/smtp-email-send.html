@@ -6,7 +6,24 @@
     defaults: {
       name: { value: "" },
       account: { value: "", type: "smtp-email account", required: true },
-      mode: { value: "compose", required: true }
+      toSource: { value: "str" },
+      toValue: { value: "", required: true },
+      ccSource: { value: "str" },
+      ccValue: { value: "" },
+      bccSource: { value: "str" },
+      bccValue: { value: "" },
+      fromSource: { value: "str" },
+      fromValue: { value: "" },
+      replyToSource: { value: "msg" },
+      replyToValue: { value: "email.header.reply-to" },
+      subjectSource: { value: "msg" },
+      subjectValue: { value: "email.topic" },
+      textSource: { value: "msg" },
+      textValue: { value: "email.text" },
+      htmlSource: { value: "msg" },
+      htmlValue: { value: "email.html" },
+      attachmentsSource: { value: "msg" },
+      attachmentsValue: { value: "email.attachments" }
     },
     inputs: 1,
     outputs: 2,
@@ -29,17 +46,85 @@
     <label for="node-input-account"><i class="fa fa-server"></i> Account</label>
     <input type="text" id="node-input-account">
   </div>
+
   <div class="form-row">
-    <label for="node-input-mode"><i class="fa fa-envelope"></i> Mode</label>
-    <select id="node-input-mode">
-      <option value="compose">compose from msg fields</option>
-      <option value="forward">forward incoming email</option>
+    <label for="node-input-toSource"><i class="fa fa-envelope"></i> To</label>
+    <select id="node-input-toSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
     </select>
+    <input type="text" id="node-input-toValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-ccSource"><i class="fa fa-envelope-o"></i> CC</label>
+    <select id="node-input-ccSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-ccValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bccSource"><i class="fa fa-envelope-o"></i> BCC</label>
+    <select id="node-input-bccSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-bccValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-fromSource"><i class="fa fa-user"></i> From</label>
+    <select id="node-input-fromSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-fromValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-replyToSource"><i class="fa fa-reply"></i> Reply-To</label>
+    <select id="node-input-replyToSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-replyToValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-subjectSource"><i class="fa fa-header"></i> Subject</label>
+    <select id="node-input-subjectSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-subjectValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-textSource"><i class="fa fa-align-left"></i> Text</label>
+    <select id="node-input-textSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-textValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-htmlSource"><i class="fa fa-code"></i> HTML</label>
+    <select id="node-input-htmlSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-htmlValue" style="width:calc(100% - 230px);">
+  </div>
+  <div class="form-row">
+    <label for="node-input-attachmentsSource"><i class="fa fa-paperclip"></i> Attachments</label>
+    <select id="node-input-attachmentsSource" style="width:120px;">
+      <option value="msg">msg.</option>
+      <option value="str">string</option>
+    </select>
+    <input type="text" id="node-input-attachmentsValue" style="width:calc(100% - 230px);">
   </div>
 </script>
 
 <script type="text/html" data-help-name="smtp-email send">
   <p>Sends email through a configured <code>smtp email account</code>.</p>
-  <p>Input messages use fields such as <code>msg.to</code>, <code>msg.cc</code>, <code>msg.bcc</code>, <code>msg.from</code>, <code>msg.replyTo</code>, <code>msg.subject</code>, <code>msg.payload</code>, <code>msg.html</code> and <code>msg.attachments</code>.</p>
+  <p>Each outgoing email field can read from a <code>msg</code> path or from a fixed string.</p>
+  <p>For messages from <code>imap email in</code>, defaults read subject, bodies and attachments from <code>msg.email</code>. Recipient fields are empty by default to avoid sending to original recipients by accident.</p>
+  <p>Fixed string attachments are not interpreted; leave the field empty or read attachments from a <code>msg</code> path.</p>
   <p>Output 1 is reserved for successful sends. Output 2 is reserved for failed sends.</p>
 </script>

@@ -66,66 +66,45 @@ On success, `msg.smtpEmail` may contain:
 
 On failure, `msg.smtpEmail.error` contains a sanitized error message.
 
-## Message Modes
+## Field Sources
 
-The send node supports two mode values.
+The send node has no global compose or forward mode. Each outgoing email field
+has its own source selector:
 
-### `compose`
+- `msg`: read a value from a message path, for example `email.text`
+- `string`: use a fixed string from the node configuration
 
-`compose` creates a new email from message fields.
+The path value is relative to `msg`, so `email.text` reads `msg.email.text`.
+Empty optional fields are omitted. If `from` is empty, the account default
+sender is used.
 
-Supported input fields:
+Default field mapping:
 
-- `msg.to`
-- `msg.cc`
-- `msg.bcc`
-- `msg.from`
-- `msg.replyTo`
-- `msg.subject`
-- `msg.payload`
-- `msg.html`
-- `msg.attachments`
+| Email field | Default source | Default value | Notes |
+| --- | --- | --- | --- |
+| `to` | `string` | empty | required before sending |
+| `cc` | `string` | empty | optional |
+| `bcc` | `string` | empty | optional |
+| `from` | `string` | empty | falls back to account sender |
+| `replyTo` | `msg` | `email.header.reply-to` | matches `imap email in` headers |
+| `subject` | `msg` | `email.topic` | matches `imap email in` subject |
+| `text` | `msg` | `email.text` | plain text body |
+| `html` | `msg` | `email.html` | HTML body |
+| `attachments` | `msg` | `email.attachments` | must resolve to an array |
 
-`msg.to` is required. `msg.payload` is used as the plain text body when it is a
-string or buffer. `msg.html` can be used for an HTML body. If `msg.from` is not
-set, the account default sender is used.
+At least one recipient and either text or HTML content are required. A non-empty
+fixed string is not accepted for attachments; use a message path for attachment
+arrays.
 
-Example message:
+The top-level fields `msg.to`, `msg.cc`, `msg.bcc`, `msg.from`,
+`msg.replyTo`, `msg.subject`, `msg.payload`, `msg.html` and
+`msg.attachments` are still usable by configuring the matching path explicitly.
+They are not used automatically.
 
-```json
-{
-  "to": "recipient@example.invalid",
-  "subject": "Status update",
-  "payload": "Plain text body",
-  "html": "<p>HTML body</p>"
-}
-```
-
-### `forward`
-
-`forward` creates a new forwarded email from a structured incoming email. This
-mode is designed to work with an external IMAP input node without creating a
-runtime dependency on that IMAP package.
-
-The new recipient is read from `msg.to`. Optional new copy recipients are read
-from `msg.cc` and `msg.bcc`. `msg.from` can override the account default sender.
-`msg.replyTo` sets the reply-to address of the forwarded email.
-
-The original email content is read from a structured `msg.email` object, or from
-a structured object in `msg.payload` when `msg.email` is not present. The
-structured object may contain:
-
-- `subject`
-- `text`
-- `html`
-- `attachments`
-
-If `msg.subject` is not set, the node creates a subject like
-`Fwd: Original subject`. If the original subject is missing, it uses
-`Fwd: forwarded email`.
-
-If no structured text or HTML content is available, the node sends the message
-to the failure output with a clear error.
+For messages from `imap email in`, the default mapping already reads subject,
+body, HTML, reply-to and attachments from the documented `msg.email` structure.
+Recipient fields are intentionally empty by default so a flow does not send to
+the original recipients by accident.
 
 ## IMAP Forwarding
 
@@ -138,9 +117,10 @@ Recommended flow:
 imap email in -> smtp email send -> imap email ack
 ```
 
-Use `smtp email send` in mode `forward`. Set the new recipient before the SMTP
-node, for example with a Change node that sets `msg.to` to
-`recipient@example.invalid`.
+Configure the `To` field on `smtp email send`, for example as the fixed string
+`recipient@example.invalid`. Leave the default `msg.email` mappings for subject,
+body, HTML, reply-to and attachments when forwarding messages from
+`imap email in`.
 
 The example flow is available at:
 

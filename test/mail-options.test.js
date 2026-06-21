@@ -3,360 +3,278 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { buildMailOptions } = require("../lib/mail-options");
+const { DEFAULT_FIELD_CONFIG, buildMailOptions } = require("../lib/mail-options");
 
-test("buildMailOptions composes mail fields from msg without SMTP access", () => {
-  const attachment = { filename: "note.txt", content: "hello" };
+function createImapMessage({ ackToken = { id: "ack-token" }, attachments } = {}) {
   const msg = {
-    to: "recipient@example.invalid",
-    cc: "copy@example.invalid",
-    bcc: "hidden@example.invalid",
-    replyTo: "reply@example.invalid",
-    subject: "Status update",
-    payload: "Plain body",
-    html: "<p>HTML body</p>",
-    attachments: [attachment],
-    imap: { ackToken: { id: "ack-token" } },
-  };
-  const account = {
-    from: "sender@example.invalid",
-  };
-
-  const mailOptions = buildMailOptions({ mode: "compose", msg, account });
-
-  assert.deepEqual(mailOptions, {
-    to: "recipient@example.invalid",
-    cc: "copy@example.invalid",
-    bcc: "hidden@example.invalid",
-    replyTo: "reply@example.invalid",
-    subject: "Status update",
-    html: "<p>HTML body</p>",
-    attachments: [attachment],
-    from: "sender@example.invalid",
-    text: "Plain body",
-  });
-  assert.equal(mailOptions.attachments[0], attachment);
-  assert.deepEqual(msg.imap, { ackToken: { id: "ack-token" } });
-});
-
-test("buildMailOptions lets msg.from override the account default sender", () => {
-  const mailOptions = buildMailOptions({
-    mode: "compose",
-    msg: {
-      to: "recipient@example.invalid",
-      from: "override@example.invalid",
-      payload: "Body",
+    topic: "Legacy topic",
+    to: "legacy-recipient@example.invalid",
+    payload: "Legacy payload",
+    email: {
+      topic: "IMAP subject",
+      from: "Original Sender <original-sender@example.invalid>",
+      to: "Original Recipient <original-recipient@example.invalid>",
+      cc: "Original Copy <original-copy@example.invalid>",
+      bcc: "Original Blind <original-blind@example.invalid>",
+      text: "IMAP text",
+      html: "<p>IMAP HTML</p>",
+      header: {
+        "reply-to": "Reply Person <reply@example.invalid>",
+      },
     },
-    account: {
-      from: "default@example.invalid",
-    },
-  });
-
-  assert.equal(mailOptions.from, "override@example.invalid");
-});
-
-test("buildMailOptions accepts buffer payload as text body", () => {
-  const payload = Buffer.from("Buffered body");
-
-  const mailOptions = buildMailOptions({
-    mode: "compose",
-    msg: {
-      to: "recipient@example.invalid",
-      payload,
-    },
-    account: {},
-  });
-
-  assert.equal(mailOptions.text, payload);
-});
-
-test("buildMailOptions does not mutate msg or imap ack tokens", () => {
-  const ackToken = { id: "ack-token" };
-  const msg = {
-    to: "recipient@example.invalid",
-    payload: "Body",
     imap: { ackToken },
   };
-  const originalMsg = structuredClone(msg);
 
-  buildMailOptions({ mode: "compose", msg, account: {} });
+  if (attachments) {
+    msg.email.attachments = attachments;
+  }
 
-  assert.deepEqual(msg, originalMsg);
-  assert.equal(msg.imap.ackToken, ackToken);
+  return msg;
+}
+
+test("default field config matches safe IMAP-oriented defaults", () => {
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.to, { source: "str", value: "" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.cc, { source: "str", value: "" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.bcc, { source: "str", value: "" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.from, { source: "str", value: "" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.replyTo, { source: "msg", value: "email.header.reply-to" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.subject, { source: "msg", value: "email.topic" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.text, { source: "msg", value: "email.text" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.html, { source: "msg", value: "email.html" });
+  assert.deepEqual(DEFAULT_FIELD_CONFIG.attachments, { source: "msg", value: "email.attachments" });
 });
 
-test("buildMailOptions rejects compose messages without recipients", () => {
+test("buildMailOptions maps configured msg paths and fixed strings", () => {
+  const attachment = { filename: "note.txt", content: "hello" };
+  const msg = createImapMessage({ attachments: [attachment] });
+
+  const mailOptions = buildMailOptions({
+    msg,
+    account: { from: "forwarder@example.invalid" },
+    fieldConfig: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
+      ccSource: "msg",
+      ccValue: "email.cc",
+      bccSource: "msg",
+      bccValue: "email.bcc",
+    },
+  });
+
+  assert.deepEqual(mailOptions, {
+    to: "new-recipient@example.invalid",
+    cc: "Original Copy <original-copy@example.invalid>",
+    bcc: "Original Blind <original-blind@example.invalid>",
+    from: "forwarder@example.invalid",
+    replyTo: "Reply Person <reply@example.invalid>",
+    subject: "IMAP subject",
+    text: "IMAP text",
+    html: "<p>IMAP HTML</p>",
+    attachments: [attachment],
+  });
+  assert.equal(mailOptions.attachments[0], attachment);
+});
+
+test("buildMailOptions does not use legacy msg.to msg.payload or mode automatically", () => {
+  const msg = createImapMessage();
+
   assert.throws(
-    () => buildMailOptions({ mode: "compose", msg: { payload: "Body" }, account: {} }),
-    /Missing msg\.to for email send/,
+    () => buildMailOptions({
+      mode: "forward",
+      msg,
+      account: { from: "forwarder@example.invalid" },
+    }),
+    /Missing configured email recipient/,
   );
 });
 
-test("buildMailOptions rejects compose messages without sendable content", () => {
+test("buildMailOptions falls back to account.from instead of msg.email.from by default", () => {
+  const mailOptions = buildMailOptions({
+    msg: createImapMessage(),
+    account: { from: "forwarder@example.invalid" },
+    fieldConfig: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
+    },
+  });
+
+  assert.equal(mailOptions.from, "forwarder@example.invalid");
+});
+
+test("buildMailOptions can use fixed strings for ordinary mail fields", () => {
+  const mailOptions = buildMailOptions({
+    msg: createImapMessage(),
+    account: {},
+    fieldConfig: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
+      subjectSource: "str",
+      subjectValue: "Fixed subject",
+      textSource: "str",
+      textValue: "Fixed text",
+      htmlSource: "str",
+      htmlValue: "",
+      replyToSource: "str",
+      replyToValue: "reply@example.invalid",
+    },
+  });
+
+  assert.deepEqual(mailOptions, {
+    to: "new-recipient@example.invalid",
+    replyTo: "reply@example.invalid",
+    subject: "Fixed subject",
+    text: "Fixed text",
+  });
+});
+
+test("buildMailOptions rejects fixed string attachments", () => {
   assert.throws(
-    () => buildMailOptions({ mode: "compose", msg: { to: "recipient@example.invalid", payload: { raw: "object" } }, account: {} }),
+    () => buildMailOptions({
+      msg: createImapMessage(),
+      account: {},
+      fieldConfig: {
+        toSource: "str",
+        toValue: "new-recipient@example.invalid",
+        attachmentsSource: "str",
+        attachmentsValue: "not-json-and-not-a-path",
+      },
+    }),
+    /Attachments cannot be configured as a fixed string/,
+  );
+});
+
+test("buildMailOptions rejects attachment msg paths that do not resolve to arrays", () => {
+  assert.throws(
+    () => buildMailOptions({
+      msg: createImapMessage(),
+      account: {},
+      fieldConfig: {
+        toSource: "str",
+        toValue: "new-recipient@example.invalid",
+        attachmentsSource: "msg",
+        attachmentsValue: "email.text",
+      },
+    }),
+    /Attachments field must resolve to an array/,
+  );
+});
+
+test("buildMailOptions normalizes reply-to header values", () => {
+  const msg = createImapMessage();
+  msg.email.header["reply-to"] = [
+    { text: "First <first@example.invalid>" },
+    "Second <second@example.invalid>",
+  ];
+
+  const mailOptions = buildMailOptions({
+    msg,
+    account: {},
+    fieldConfig: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
+    },
+  });
+
+  assert.equal(mailOptions.replyTo, "First <first@example.invalid>, Second <second@example.invalid>");
+});
+
+test("buildMailOptions omits unusable reply-to objects", () => {
+  const msg = createImapMessage();
+  msg.email.header["reply-to"] = { value: "not a supported address shape" };
+
+  const mailOptions = buildMailOptions({
+    msg,
+    account: {},
+    fieldConfig: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
+    },
+  });
+
+  assert.equal(mailOptions.replyTo, undefined);
+});
+
+test("buildMailOptions rejects unsafe msg paths", () => {
+  assert.throws(
+    () => buildMailOptions({
+      msg: createImapMessage(),
+      account: {},
+      fieldConfig: {
+        toSource: "msg",
+        toValue: "__proto__.polluted",
+      },
+    }),
+    /Unsafe msg path/,
+  );
+});
+
+test("buildMailOptions requires recipient and text or html content", () => {
+  assert.throws(
+    () => buildMailOptions({
+      msg: createImapMessage(),
+      account: {},
+      fieldConfig: {
+        toSource: "str",
+        toValue: "",
+      },
+    }),
+    /Missing configured email recipient/,
+  );
+
+  assert.throws(
+    () => buildMailOptions({
+      msg: createImapMessage(),
+      account: {},
+      fieldConfig: {
+        toSource: "str",
+        toValue: "new-recipient@example.invalid",
+        textSource: "str",
+        textValue: "",
+        htmlSource: "str",
+        htmlValue: "",
+      },
+    }),
     /No email content to send/,
   );
 });
 
-test("buildMailOptions rejects unsupported modes without exposing message data", () => {
-  assert.throws(
-    () => buildMailOptions({
-      mode: "unsupported",
-      msg: {
-        to: "recipient@example.invalid",
-        payload: "Body",
-      },
-      account: {
-        from: "sender@example.invalid",
-        password: "test-password",
-      },
-    }),
-    /Unsupported smtp email send mode: unsupported/,
-  );
-});
-
-test("buildMailOptions rejects invalid inputs with clear errors", () => {
-  assert.throws(
-    () => buildMailOptions({ mode: "compose", msg: null, account: {} }),
-    /msg must be an object/,
-  );
-  assert.throws(
-    () => buildMailOptions({ mode: "compose", msg: { to: "recipient@example.invalid", payload: "Body" }, account: null }),
-    /account must be an object/,
-  );
-});
-
-test("buildMailOptions does not copy credential or transport fields into mail options", () => {
-  const mailOptions = buildMailOptions({
-    mode: "compose",
-    msg: {
-      to: "recipient@example.invalid",
-      payload: "Body",
-      username: "msg-user",
-      password: "msg-password",
-      user: "msg-user-field",
-      pass: "msg-pass-field",
-      auth: { user: "msg-auth-user", pass: "msg-auth-pass" },
-    },
-    account: {
-      from: "sender@example.invalid",
-      username: "account-user",
-      password: "account-password",
-      user: "account-user-field",
-      pass: "account-pass-field",
-      auth: { user: "account-auth-user", pass: "account-auth-pass" },
-    },
-  });
-
-  assert.equal(mailOptions.username, undefined);
-  assert.equal(mailOptions.password, undefined);
-  assert.equal(mailOptions.user, undefined);
-  assert.equal(mailOptions.pass, undefined);
-  assert.equal(mailOptions.auth, undefined);
-});
-
-test("buildMailOptions forwards structured msg.email content to a new recipient", () => {
+test("buildMailOptions does not mutate msg or imap ack tokens", () => {
   const ackToken = { id: "ack-token" };
-  const attachment = { filename: "original.txt", content: "original" };
-  const msg = {
-    to: "new-recipient@example.invalid",
-    imap: { ackToken },
-    email: {
-      from: "original-sender@example.invalid",
-      subject: "Original subject",
-      text: "Original text",
-      html: "<p>Original HTML</p>",
-      attachments: [attachment],
-    },
-  };
-
-  const mailOptions = buildMailOptions({
-    mode: "forward",
-    msg,
-    account: {
-      from: "forwarder@example.invalid",
-    },
-  });
-
-  assert.deepEqual(mailOptions, {
-    to: "new-recipient@example.invalid",
-    subject: "Fwd: Original subject",
-    from: "forwarder@example.invalid",
-    text: "Original text",
-    html: "<p>Original HTML</p>",
-    attachments: [attachment],
-  });
-  assert.equal(mailOptions.attachments[0], attachment);
-  assert.equal(msg.imap.ackToken, ackToken);
-});
-
-test("buildMailOptions lets forward msg fields override recipients and sender fields", () => {
-  const mailOptions = buildMailOptions({
-    mode: "forward",
-    msg: {
-      to: "new-recipient@example.invalid",
-      cc: "copy@example.invalid",
-      bcc: "hidden@example.invalid",
-      from: "override-sender@example.invalid",
-      replyTo: "reply@example.invalid",
-      subject: "Forwarded with context",
-      email: {
-        subject: "Original subject",
-        text: "Original text",
-      },
-    },
-    account: {
-      from: "account-sender@example.invalid",
-    },
-  });
-
-  assert.deepEqual(mailOptions, {
-    to: "new-recipient@example.invalid",
-    subject: "Forwarded with context",
-    cc: "copy@example.invalid",
-    bcc: "hidden@example.invalid",
-    replyTo: "reply@example.invalid",
-    from: "override-sender@example.invalid",
-    text: "Original text",
-  });
-});
-
-test("buildMailOptions uses a generic forward subject when the original subject is missing", () => {
-  const mailOptions = buildMailOptions({
-    mode: "forward",
-    msg: {
-      to: "new-recipient@example.invalid",
-      email: {
-        text: "Original text",
-      },
-    },
-    account: {},
-  });
-
-  assert.equal(mailOptions.subject, "Fwd: forwarded email");
-});
-
-test("buildMailOptions forwards structured object payload when msg.email is absent", () => {
-  const mailOptions = buildMailOptions({
-    mode: "forward",
-    msg: {
-      to: "new-recipient@example.invalid",
-      payload: {
-        subject: "Payload subject",
-        html: "<p>Payload HTML</p>",
-      },
-    },
-    account: {},
-  });
-
-  assert.deepEqual(mailOptions, {
-    to: "new-recipient@example.invalid",
-    subject: "Fwd: Payload subject",
-    html: "<p>Payload HTML</p>",
-  });
-});
-
-test("buildMailOptions rejects forward messages without recipients", () => {
-  assert.throws(
-    () => buildMailOptions({
-      mode: "forward",
-      msg: {
-        email: { text: "Original text" },
-      },
-      account: {},
-    }),
-    /Missing msg\.to for email forward/,
-  );
-});
-
-test("buildMailOptions rejects forward messages without structured email", () => {
-  assert.throws(
-    () => buildMailOptions({
-      mode: "forward",
-      msg: {
-        to: "new-recipient@example.invalid",
-        payload: "Plain payload is not structured incoming email",
-      },
-      account: {},
-    }),
-    /No structured email content to forward/,
-  );
-});
-
-test("buildMailOptions rejects attachments-only forward messages", () => {
-  assert.throws(
-    () => buildMailOptions({
-      mode: "forward",
-      msg: {
-        to: "new-recipient@example.invalid",
-        email: {
-          subject: "Attachments only",
-          attachments: [{ filename: "only.txt", content: "attachment" }],
-        },
-      },
-      account: {},
-    }),
-    /No structured email content to forward/,
-  );
-});
-
-test("buildMailOptions does not mutate forwarded messages or imap ack tokens", () => {
-  const ackToken = { id: "ack-token" };
-  const msg = {
-    to: "new-recipient@example.invalid",
-    imap: { ackToken },
-    email: {
-      subject: "Original subject",
-      text: "Original text",
-    },
-  };
+  const msg = createImapMessage({ ackToken });
   const imap = msg.imap;
   const originalMsg = structuredClone(msg);
 
-  buildMailOptions({ mode: "forward", msg, account: {} });
+  buildMailOptions({
+    msg,
+    account: { from: "forwarder@example.invalid" },
+    fieldConfig: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
+    },
+  });
 
   assert.deepEqual(msg, originalMsg);
   assert.equal(msg.imap, imap);
   assert.equal(msg.imap.ackToken, ackToken);
 });
 
-test("buildMailOptions does not copy forward credential or transport fields into mail options", () => {
+test("buildMailOptions does not copy credential or transport fields into mail options", () => {
+  const msg = createImapMessage();
+  msg.username = "msg-user";
+  msg.password = "msg-password";
+  msg.auth = { user: "msg-auth-user", pass: "msg-auth-pass" };
+
   const mailOptions = buildMailOptions({
-    mode: "forward",
-    msg: {
-      to: "new-recipient@example.invalid",
-      username: "msg-user",
-      password: "msg-password",
-      user: "msg-user-field",
-      pass: "msg-pass-field",
-      auth: { user: "msg-auth-user", pass: "msg-auth-pass" },
-      email: {
-        subject: "Original subject",
-        text: "Original text",
-        username: "email-user",
-        password: "email-password",
-        user: "email-user-field",
-        pass: "email-pass-field",
-        auth: { user: "email-auth-user", pass: "email-auth-pass" },
-      },
-      payload: {
-        subject: "Payload subject",
-        text: "Payload text",
-        username: "payload-user",
-        password: "payload-password",
-        user: "payload-user-field",
-        pass: "payload-pass-field",
-        auth: { user: "payload-auth-user", pass: "payload-auth-pass" },
-      },
-    },
+    msg,
     account: {
       from: "forwarder@example.invalid",
       username: "account-user",
       password: "account-password",
-      user: "account-user-field",
-      pass: "account-pass-field",
       auth: { user: "account-auth-user", pass: "account-auth-pass" },
+    },
+    fieldConfig: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
     },
   });
 

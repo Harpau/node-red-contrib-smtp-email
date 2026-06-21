@@ -33,7 +33,7 @@ function createFakeRed({ accountNode } = {}) {
   };
 }
 
-function createSendNode({ accountNode, transportFactory, mode = "compose" }) {
+function createSendNode({ accountNode, transportFactory, config = {} }) {
   const { RED, registeredTypes } = createFakeRed({ accountNode });
 
   registerSmtpEmailSendNode(RED, { transportFactory });
@@ -42,10 +42,51 @@ function createSendNode({ accountNode, transportFactory, mode = "compose" }) {
   const node = new NodeConstructor({
     name: "send",
     account: "smtp-account-1",
-    mode,
+    ...config,
   });
 
   return node;
+}
+
+function createAccountNode() {
+  return {
+    host: "smtp.example.invalid",
+    port: "587",
+    secure: false,
+    rejectUnauthorized: true,
+    from: "forwarder@example.invalid",
+    credentials: {
+      username: "test-user",
+      password: "test-password",
+    },
+  };
+}
+
+function createImapMessage({ ackToken = { id: "ack-token" }, attachments } = {}) {
+  const msg = {
+    topic: "Legacy topic",
+    to: "legacy-recipient@example.invalid",
+    payload: "Legacy payload",
+    email: {
+      topic: "IMAP subject",
+      from: "Original Sender <original-sender@example.invalid>",
+      to: "Original Recipient <original-recipient@example.invalid>",
+      cc: "Original Copy <original-copy@example.invalid>",
+      bcc: "Original Blind <original-blind@example.invalid>",
+      text: "IMAP text",
+      html: "<p>IMAP HTML</p>",
+      header: {
+        "reply-to": "Reply Person <reply@example.invalid>",
+      },
+    },
+    imap: { ackToken },
+  };
+
+  if (attachments) {
+    msg.email.attachments = attachments;
+  }
+
+  return msg;
 }
 
 async function runInput(node, msg) {
@@ -68,24 +109,22 @@ async function runInput(node, msg) {
   return { sentMessages, doneCalls };
 }
 
-test("smtp send node sends planned mail through an injected transport", async () => {
+test("smtp send node sends mapped fields through an injected transport", async () => {
   const ackToken = { id: "ack-token" };
-  const accountNode = {
-    host: "smtp.example.invalid",
-    port: "587",
-    secure: false,
-    rejectUnauthorized: true,
-    from: "sender@example.invalid",
-    credentials: {
-      username: "test-user",
-      password: "test-password",
-    },
-  };
+  const attachment = { filename: "note.txt", content: "hello" };
   let capturedTransportOptions;
   let capturedMailOptions;
   let transportClosed = false;
   const node = createSendNode({
-    accountNode,
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "new-recipient@example.invalid",
+      ccSource: "msg",
+      ccValue: "email.cc",
+      bccSource: "msg",
+      bccValue: "email.bcc",
+    },
     transportFactory(options) {
       capturedTransportOptions = options;
 
@@ -95,7 +134,7 @@ test("smtp send node sends planned mail through an injected transport", async ()
 
           return {
             messageId: "message-id",
-            accepted: ["recipient@example.invalid"],
+            accepted: ["new-recipient@example.invalid"],
             rejected: [],
             response: "250 queued",
           };
@@ -106,11 +145,7 @@ test("smtp send node sends planned mail through an injected transport", async ()
       };
     },
   });
-  const msg = {
-    to: "recipient@example.invalid",
-    payload: "Body",
-    imap: { ackToken },
-  };
+  const msg = createImapMessage({ ackToken, attachments: [attachment] });
 
   const { sentMessages, doneCalls } = await runInput(node, msg);
 
@@ -127,138 +162,22 @@ test("smtp send node sends planned mail through an injected transport", async ()
     },
   });
   assert.deepEqual(capturedMailOptions, {
-    to: "recipient@example.invalid",
-    from: "sender@example.invalid",
-    text: "Body",
+    to: "new-recipient@example.invalid",
+    cc: "Original Copy <original-copy@example.invalid>",
+    bcc: "Original Blind <original-blind@example.invalid>",
+    from: "forwarder@example.invalid",
+    replyTo: "Reply Person <reply@example.invalid>",
+    subject: "IMAP subject",
+    text: "IMAP text",
+    html: "<p>IMAP HTML</p>",
+    attachments: [attachment],
   });
+  assert.equal(capturedMailOptions.attachments[0], attachment);
   assert.equal(transportClosed, true);
   assert.deepEqual(sentMessages, [[msg, null]]);
   assert.deepEqual(doneCalls, [undefined]);
   assert.deepEqual(msg.smtpEmail, {
     messageId: "message-id",
-    accepted: ["recipient@example.invalid"],
-    rejected: [],
-    response: "250 queued",
-  });
-  assert.equal(msg.smtpEmail.error, undefined);
-  assert.equal(msg.imap.ackToken, ackToken);
-});
-
-test("smtp send node sends compose cc bcc reply-to html and attachments", async () => {
-  const attachment = { filename: "report.txt", content: "report" };
-  let capturedMailOptions;
-  const node = createSendNode({
-    accountNode: {
-      host: "smtp.example.invalid",
-      port: 587,
-      from: "sender@example.invalid",
-    },
-    transportFactory() {
-      return {
-        async sendMail(mailOptions) {
-          capturedMailOptions = mailOptions;
-
-          return {
-            messageId: "message-id",
-            accepted: ["recipient@example.invalid"],
-            rejected: [],
-            response: "250 queued",
-          };
-        },
-        close() {},
-      };
-    },
-  });
-  const msg = {
-    to: "recipient@example.invalid",
-    cc: "copy@example.invalid",
-    bcc: "hidden@example.invalid",
-    replyTo: "reply@example.invalid",
-    subject: "Compose subject",
-    payload: "Plain body",
-    html: "<p>HTML body</p>",
-    attachments: [attachment],
-  };
-
-  const { sentMessages, doneCalls } = await runInput(node, msg);
-
-  assert.deepEqual(capturedMailOptions, {
-    to: "recipient@example.invalid",
-    cc: "copy@example.invalid",
-    bcc: "hidden@example.invalid",
-    replyTo: "reply@example.invalid",
-    subject: "Compose subject",
-    html: "<p>HTML body</p>",
-    attachments: [attachment],
-    from: "sender@example.invalid",
-    text: "Plain body",
-  });
-  assert.equal(capturedMailOptions.attachments[0], attachment);
-  assert.deepEqual(sentMessages, [[msg, null]]);
-  assert.deepEqual(doneCalls, [undefined]);
-  assert.equal(msg.smtpEmail.error, undefined);
-});
-
-test("smtp send node forwards structured mail with cc bcc reply-to and attachments", async () => {
-  const ackToken = { id: "ack-token" };
-  const attachment = { filename: "forwarded.txt", content: "forwarded" };
-  let capturedMailOptions;
-  const node = createSendNode({
-    mode: "forward",
-    accountNode: {
-      host: "smtp.example.invalid",
-      port: 587,
-      from: "forwarder@example.invalid",
-    },
-    transportFactory() {
-      return {
-        async sendMail(mailOptions) {
-          capturedMailOptions = mailOptions;
-
-          return {
-            messageId: "forward-message-id",
-            accepted: ["new-recipient@example.invalid"],
-            rejected: [],
-            response: "250 queued",
-          };
-        },
-        close() {},
-      };
-    },
-  });
-  const msg = {
-    to: "new-recipient@example.invalid",
-    cc: "copy@example.invalid",
-    bcc: "hidden@example.invalid",
-    replyTo: "reply@example.invalid",
-    imap: { ackToken },
-    email: {
-      subject: "Original subject",
-      text: "Original text",
-      html: "<p>Original HTML</p>",
-      replyTo: "original-reply@example.invalid",
-      attachments: [attachment],
-    },
-  };
-
-  const { sentMessages, doneCalls } = await runInput(node, msg);
-
-  assert.deepEqual(capturedMailOptions, {
-    to: "new-recipient@example.invalid",
-    subject: "Fwd: Original subject",
-    cc: "copy@example.invalid",
-    bcc: "hidden@example.invalid",
-    replyTo: "reply@example.invalid",
-    from: "forwarder@example.invalid",
-    text: "Original text",
-    html: "<p>Original HTML</p>",
-    attachments: [attachment],
-  });
-  assert.equal(capturedMailOptions.attachments[0], attachment);
-  assert.deepEqual(sentMessages, [[msg, null]]);
-  assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(msg.smtpEmail, {
-    messageId: "forward-message-id",
     accepted: ["new-recipient@example.invalid"],
     rejected: [],
     response: "250 queued",
@@ -267,51 +186,106 @@ test("smtp send node forwards structured mail with cc bcc reply-to and attachmen
   assert.equal(msg.imap.ackToken, ackToken);
 });
 
-test("smtp send node routes planning errors to the failure output only", async () => {
+test("smtp send node can send fixed string content fields", async () => {
+  let capturedMailOptions;
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
+      subjectSource: "str",
+      subjectValue: "Fixed subject",
+      textSource: "str",
+      textValue: "Fixed body",
+      htmlSource: "str",
+      htmlValue: "",
+      attachmentsSource: "str",
+      attachmentsValue: "",
+    },
+    transportFactory() {
+      return {
+        async sendMail(mailOptions) {
+          capturedMailOptions = mailOptions;
+          return { messageId: "message-id" };
+        },
+        close() {},
+      };
+    },
+  });
+
+  const { sentMessages, doneCalls } = await runInput(node, createImapMessage());
+
+  assert.deepEqual(capturedMailOptions, {
+    to: "recipient@example.invalid",
+    from: "forwarder@example.invalid",
+    replyTo: "Reply Person <reply@example.invalid>",
+    subject: "Fixed subject",
+    text: "Fixed body",
+  });
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0][1], null);
+  assert.deepEqual(doneCalls, [undefined]);
+});
+
+test("smtp send node does not automatically use legacy mode msg.to or msg.payload", async () => {
   const ackToken = { id: "ack-token" };
   let transportFactoryCalled = false;
   const node = createSendNode({
-    accountNode: {
-      host: "smtp.example.invalid",
-      port: 587,
-      from: "sender@example.invalid",
-      credentials: {
-        username: "test-user",
-        password: "test-password",
-      },
+    accountNode: createAccountNode(),
+    config: {
+      mode: "forward",
+      textSource: "str",
+      textValue: "",
+      htmlSource: "str",
+      htmlValue: "",
     },
     transportFactory() {
       transportFactoryCalled = true;
     },
   });
-  const msg = {
-    payload: "Body",
-    imap: { ackToken },
-  };
+  const msg = createImapMessage({ ackToken });
 
   const { sentMessages, doneCalls } = await runInput(node, msg);
 
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(sentMessages, [[null, msg]]);
-  assert.equal(sentMessages.length, 1);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.match(msg.smtpEmail.error, /Missing msg\.to for email send/);
-  assert.doesNotMatch(msg.smtpEmail.error, /test-password|test-user|smtp\.example\.invalid/);
+  assert.match(msg.smtpEmail.error, /Missing configured email recipient/);
   assert.equal(msg.imap.ackToken, ackToken);
 });
 
-test("smtp send node routes transport errors to the failure output with sanitized text", async () => {
+test("smtp send node routes attachment string configuration errors to failure output", async () => {
+  let transportFactoryCalled = false;
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
+      attachmentsSource: "str",
+      attachmentsValue: "attachment.txt",
+    },
+    transportFactory() {
+      transportFactoryCalled = true;
+    },
+  });
+  const msg = createImapMessage();
+
+  const { sentMessages, doneCalls } = await runInput(node, msg);
+
+  assert.equal(transportFactoryCalled, false);
+  assert.deepEqual(sentMessages, [[null, msg]]);
+  assert.deepEqual(doneCalls, [undefined]);
+  assert.match(msg.smtpEmail.error, /Attachments cannot be configured as a fixed string/);
+});
+
+test("smtp send node routes transport errors to failure output with sanitized text", async () => {
   const ackToken = { id: "ack-token" };
   let transportClosed = false;
   const node = createSendNode({
-    accountNode: {
-      host: "smtp.example.invalid",
-      port: 587,
-      from: "sender@example.invalid",
-      credentials: {
-        username: "test-user",
-        password: "test-password",
-      },
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
     },
     transportFactory() {
       return {
@@ -324,11 +298,7 @@ test("smtp send node routes transport errors to the failure output with sanitize
       };
     },
   });
-  const msg = {
-    to: "recipient@example.invalid",
-    payload: "Body",
-    imap: { ackToken },
-  };
+  const msg = createImapMessage({ ackToken });
 
   const { sentMessages, doneCalls } = await runInput(node, msg);
 
@@ -345,14 +315,15 @@ test("smtp send node routes missing accounts to the failure output", async () =>
   let transportFactoryCalled = false;
   const node = createSendNode({
     accountNode: null,
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
+    },
     transportFactory() {
       transportFactoryCalled = true;
     },
   });
-  const msg = {
-    to: "recipient@example.invalid",
-    payload: "Body",
-  };
+  const msg = createImapMessage();
 
   const { sentMessages, doneCalls } = await runInput(node, msg);
 
@@ -364,23 +335,16 @@ test("smtp send node routes missing accounts to the failure output", async () =>
 
 test("smtp send node sanitizes transport factory errors", async () => {
   const node = createSendNode({
-    accountNode: {
-      host: "smtp.example.invalid",
-      port: 587,
-      from: "sender@example.invalid",
-      credentials: {
-        username: "test-user",
-        password: "test-password",
-      },
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
     },
     transportFactory() {
       throw new Error("Factory failed for test-user/test-password@smtp.example.invalid");
     },
   });
-  const msg = {
-    to: "recipient@example.invalid",
-    payload: "Body",
-  };
+  const msg = createImapMessage();
 
   const { sentMessages, doneCalls } = await runInput(node, msg);
 

@@ -196,6 +196,31 @@ test("smtp send node does not declare credentials", () => {
   assert.equal(registeredTypes[0].options, undefined);
 });
 
+test("smtp send editor exposes field source defaults instead of mode defaults", () => {
+  const registryNodes = getRegistryNodes();
+  const htmlPath = getHtmlPathForRuntimePath(registryNodes["smtp-email send"]);
+  const htmlSource = readProjectFile(htmlPath);
+  const editorRegistrationSource = getEditorRegistrationSource(htmlSource, "smtp-email send");
+
+  assert.doesNotMatch(editorRegistrationSource, /\bmode\s*:/);
+  assert.match(editorRegistrationSource, /toSource:\s*{\s*value:\s*"str"\s*}/);
+  assert.match(editorRegistrationSource, /toValue:\s*{\s*value:\s*""\s*,\s*required:\s*true\s*}/);
+  assert.match(editorRegistrationSource, /ccSource:\s*{\s*value:\s*"str"\s*}/);
+  assert.match(editorRegistrationSource, /bccSource:\s*{\s*value:\s*"str"\s*}/);
+  assert.match(editorRegistrationSource, /fromSource:\s*{\s*value:\s*"str"\s*}/);
+  assert.match(editorRegistrationSource, /replyToSource:\s*{\s*value:\s*"msg"\s*}/);
+  assert.match(editorRegistrationSource, /replyToValue:\s*{\s*value:\s*"email\.header\.reply-to"\s*}/);
+  assert.match(editorRegistrationSource, /subjectValue:\s*{\s*value:\s*"email\.topic"\s*}/);
+  assert.match(editorRegistrationSource, /textValue:\s*{\s*value:\s*"email\.text"\s*}/);
+  assert.match(editorRegistrationSource, /htmlValue:\s*{\s*value:\s*"email\.html"\s*}/);
+  assert.match(editorRegistrationSource, /attachmentsValue:\s*{\s*value:\s*"email\.attachments"\s*}/);
+
+  for (const field of ["to", "cc", "bcc", "from", "replyTo", "subject", "text", "html", "attachments"]) {
+    assert.match(htmlSource, new RegExp(`id="node-input-${field}Source"`));
+    assert.match(htmlSource, new RegExp(`id="node-input-${field}Value"`));
+  }
+});
+
 test("smtp account editor keeps credentials out of defaults", () => {
   const registryNodes = getRegistryNodes();
   const htmlPath = getHtmlPathForRuntimePath(registryNodes["smtp-email account"]);
