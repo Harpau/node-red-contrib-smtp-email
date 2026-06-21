@@ -71,9 +71,14 @@ Node status:
 | Status | Meaning |
 | --- | --- |
 | `sending` | SMTP send is in progress |
-| `sent` | last send succeeded |
+| `sent N` | last send succeeded; volatile sent count |
+| `failed N` | planning or sending failed; volatile failed count |
+| `sent N, failed M` | both counts are shown after mixed outcomes |
 | `missing account` | SMTP account configuration is missing |
-| `failed` | planning or sending failed; see `msg.smtpEmail.error` |
+
+The sent and failed counts are kept in memory per node instance and reset on
+deploy or restart. Status text does not include SMTP hosts, account values,
+recipient addresses or SMTP error details.
 
 ## Field Sources
 

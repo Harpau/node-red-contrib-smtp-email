@@ -49,6 +49,30 @@ function setStatus(node, statusName) {
   }
 }
 
+function buildCountStatusText(node, statusName) {
+  const parts = [];
+
+  if (node.sentCount > 0) {
+    parts.push(`sent ${node.sentCount}`);
+  }
+
+  if (node.failedCount > 0) {
+    parts.push(`failed ${node.failedCount}`);
+  }
+
+  return parts.length > 0 ? parts.join(", ") : STATUS[statusName].text;
+}
+
+function setCountStatus(node, statusName) {
+  if (typeof node.status === "function") {
+    node.status({
+      fill: STATUS[statusName].fill,
+      shape: STATUS[statusName].shape,
+      text: buildCountStatusText(node, statusName),
+    });
+  }
+}
+
 function getFieldConfig(config) {
   return MAIL_FIELDS.reduce((fieldConfig, field) => {
     fieldConfig[`${field}Source`] = config[`${field}Source`];
@@ -67,6 +91,8 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
     this.account = config.account;
     this.fieldConfig = getFieldConfig(config);
     this.buildMailOptions = buildMailOptions;
+    this.sentCount = 0;
+    this.failedCount = 0;
 
     this.on("input", async function handleInput(msg, send, done) {
       const nodeSend = typeof send === "function" ? send : node.send.bind(node);
@@ -96,13 +122,19 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
         const info = await transport.sendMail(mailOptions);
 
         msg.smtpEmail = buildSmtpEmailMetadata(info);
-        setStatus(node, "sent");
+        node.sentCount += 1;
+        setCountStatus(node, "sent");
         nodeSend([msg, null]);
       } catch (error) {
         msg.smtpEmail = {
           error: sanitizeErrorMessage(error, getErrorSecrets(accountNode)),
         };
-        setStatus(node, statusName);
+        if (statusName === "failed") {
+          node.failedCount += 1;
+          setCountStatus(node, statusName);
+        } else {
+          setStatus(node, statusName);
+        }
         nodeSend([null, msg]);
       } finally {
         closeTransport(transport);

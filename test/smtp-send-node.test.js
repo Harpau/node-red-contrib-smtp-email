@@ -5,10 +5,16 @@ const test = require("node:test");
 
 const registerSmtpEmailSendNode = require("../nodes/smtp-email-send");
 
-const STATUS_FAILED = { fill: "red", shape: "ring", text: "failed" };
 const STATUS_MISSING_ACCOUNT = { fill: "red", shape: "ring", text: "missing account" };
 const STATUS_SENDING = { fill: "blue", shape: "dot", text: "sending" };
-const STATUS_SENT = { fill: "green", shape: "dot", text: "sent" };
+
+function failedStatus(text) {
+  return { fill: "red", shape: "ring", text };
+}
+
+function sentStatus(text) {
+  return { fill: "green", shape: "dot", text };
+}
 
 function createFakeRed({ accountNode } = {}) {
   const registeredTypes = new Map();
@@ -194,7 +200,7 @@ test("smtp send node sends mapped fields through an injected transport", async (
   assert.equal(transportClosed, true);
   assert.deepEqual(sentMessages, [[msg, null]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, STATUS_SENT]);
+  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
   assert.deepEqual(msg.smtpEmail, {
     messageId: "message-id",
     accepted: ["new-recipient@example.invalid"],
@@ -241,7 +247,148 @@ test("smtp send node shows sending while sendMail is pending", async () => {
 
   assert.deepEqual(sentMessages, [[msg, null]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, STATUS_SENT]);
+  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+});
+
+test("smtp send node counts repeated successful sends per node instance", async () => {
+  let sendCalls = 0;
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
+    },
+    transportFactory() {
+      return {
+        async sendMail() {
+          sendCalls += 1;
+          return { messageId: `message-id-${sendCalls}` };
+        },
+        close() {},
+      };
+    },
+  });
+
+  await runInput(node, createImapMessage());
+  await runInput(node, createImapMessage());
+
+  assert.equal(sendCalls, 2);
+  assert.deepEqual(node.statusCalls, [
+    STATUS_SENDING,
+    sentStatus("sent 1"),
+    STATUS_SENDING,
+    sentStatus("sent 2"),
+  ]);
+  assert.equal(node.sentCount, 2);
+  assert.equal(node.failedCount, 0);
+});
+
+test("smtp send node shows sent and failed counts after mixed outcomes", async () => {
+  let sendCalls = 0;
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
+    },
+    transportFactory() {
+      return {
+        async sendMail() {
+          sendCalls += 1;
+
+          if (sendCalls === 2) {
+            throw new Error("SMTP send failed");
+          }
+
+          return { messageId: `message-id-${sendCalls}` };
+        },
+        close() {},
+      };
+    },
+  });
+  const first = createImapMessage();
+  const second = createImapMessage();
+  const third = createImapMessage();
+
+  assert.deepEqual((await runInput(node, first)).sentMessages, [[first, null]]);
+  assert.deepEqual((await runInput(node, second)).sentMessages, [[null, second]]);
+  assert.deepEqual((await runInput(node, third)).sentMessages, [[third, null]]);
+
+  assert.deepEqual(node.statusCalls, [
+    STATUS_SENDING,
+    sentStatus("sent 1"),
+    STATUS_SENDING,
+    failedStatus("sent 1, failed 1"),
+    STATUS_SENDING,
+    sentStatus("sent 2, failed 1"),
+  ]);
+  assert.equal(node.sentCount, 2);
+  assert.equal(node.failedCount, 1);
+});
+
+test("smtp send node counts repeated planning failures without sending status", async () => {
+  let transportFactoryCalled = false;
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: {
+      textSource: "str",
+      textValue: "",
+      htmlSource: "str",
+      htmlValue: "",
+    },
+    transportFactory() {
+      transportFactoryCalled = true;
+    },
+  });
+  const first = createImapMessage();
+  const second = createImapMessage();
+
+  assert.deepEqual((await runInput(node, first)).sentMessages, [[null, first]]);
+  assert.deepEqual((await runInput(node, second)).sentMessages, [[null, second]]);
+
+  assert.equal(transportFactoryCalled, false);
+  assert.deepEqual(node.statusCalls, [
+    failedStatus("failed 1"),
+    failedStatus("failed 2"),
+  ]);
+  assert.equal(node.sentCount, 0);
+  assert.equal(node.failedCount, 2);
+});
+
+test("smtp send node keeps status counts isolated per node instance", async () => {
+  function transportFactory() {
+    return {
+      async sendMail() {
+        return { messageId: "message-id" };
+      },
+      close() {},
+    };
+  }
+
+  const firstNode = createSendNode({
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
+    },
+    transportFactory,
+  });
+  const secondNode = createSendNode({
+    accountNode: createAccountNode(),
+    config: {
+      toSource: "str",
+      toValue: "recipient@example.invalid",
+    },
+    transportFactory,
+  });
+
+  await runInput(firstNode, createImapMessage());
+  await runInput(secondNode, createImapMessage());
+
+  assert.deepEqual(firstNode.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+  assert.deepEqual(secondNode.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+  assert.equal(firstNode.sentCount, 1);
+  assert.equal(secondNode.sentCount, 1);
 });
 
 test("smtp send node can send fixed string content fields", async () => {
@@ -283,7 +430,7 @@ test("smtp send node can send fixed string content fields", async () => {
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0][1], null);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, STATUS_SENT]);
+  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
 });
 
 test("smtp send node does not automatically use legacy mode msg.to or msg.payload", async () => {
@@ -309,7 +456,7 @@ test("smtp send node does not automatically use legacy mode msg.to or msg.payloa
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_FAILED]);
+  assert.deepEqual(node.statusCalls, [failedStatus("failed 1")]);
   assert.match(msg.smtpEmail.error, /Missing configured email recipient/);
   assert.equal(msg.imap.ackToken, ackToken);
 });
@@ -335,7 +482,7 @@ test("smtp send node routes attachment string configuration errors to failure ou
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_FAILED]);
+  assert.deepEqual(node.statusCalls, [failedStatus("failed 1")]);
   assert.match(msg.smtpEmail.error, /Attachments cannot be configured as a fixed string/);
 });
 
@@ -367,7 +514,7 @@ test("smtp send node routes transport errors to failure output with sanitized te
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.equal(sentMessages.length, 1);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, STATUS_FAILED]);
+  assert.deepEqual(node.statusCalls, [STATUS_SENDING, failedStatus("failed 1")]);
   assertStatusTextsDoNotExposeSecrets(node.statusCalls);
   assert.equal(msg.smtpEmail.error, "Login failed for [redacted] using [redacted] at [redacted]");
   assert.doesNotMatch(msg.smtpEmail.error, /test-password|test-user|smtp\.example\.invalid/);
@@ -404,7 +551,7 @@ test("smtp send node ignores close errors after successful send", async () => {
   assert.equal(closeCalled, true);
   assert.deepEqual(sentMessages, [[msg, null]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, STATUS_SENT]);
+  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
   assert.equal(msg.smtpEmail.messageId, "message-id");
   assert.equal(msg.smtpEmail.error, undefined);
 });
@@ -429,6 +576,8 @@ test("smtp send node routes missing accounts to the failure output", async () =>
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
   assert.deepEqual(node.statusCalls, [STATUS_MISSING_ACCOUNT]);
+  assert.equal(node.sentCount, 0);
+  assert.equal(node.failedCount, 0);
   assert.equal(msg.smtpEmail.error, "SMTP account is not configured");
 });
 
@@ -449,7 +598,7 @@ test("smtp send node sanitizes transport factory errors", async () => {
 
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_FAILED]);
+  assert.deepEqual(node.statusCalls, [failedStatus("failed 1")]);
   assertStatusTextsDoNotExposeSecrets(node.statusCalls);
   assert.equal(msg.smtpEmail.error, "Factory failed for [redacted]/[redacted]@[redacted]");
 });
