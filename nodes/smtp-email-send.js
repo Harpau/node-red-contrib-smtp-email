@@ -3,6 +3,13 @@
 const { MAIL_FIELDS, buildMailOptions } = require("../lib/mail-options");
 const { createSmtpTransport, sanitizeErrorMessage } = require("../lib/smtp-transport");
 
+const STATUS = Object.freeze({
+  failed: Object.freeze({ fill: "red", shape: "ring", text: "failed" }),
+  missingAccount: Object.freeze({ fill: "red", shape: "ring", text: "missing account" }),
+  sending: Object.freeze({ fill: "blue", shape: "dot", text: "sending" }),
+  sent: Object.freeze({ fill: "green", shape: "dot", text: "sent" }),
+});
+
 function getErrorSecrets(account) {
   if (!account || typeof account !== "object") {
     return [];
@@ -28,7 +35,17 @@ function buildSmtpEmailMetadata(info = {}) {
 
 function closeTransport(transport) {
   if (transport && typeof transport.close === "function") {
-    transport.close();
+    try {
+      transport.close();
+    } catch {
+      // Closing errors must not change the already selected success/failure output.
+    }
+  }
+}
+
+function setStatus(node, statusName) {
+  if (typeof node.status === "function") {
+    node.status({ ...STATUS[statusName] });
   }
 }
 
@@ -54,11 +71,14 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
     this.on("input", async function handleInput(msg, send, done) {
       const nodeSend = typeof send === "function" ? send : node.send.bind(node);
       let accountNode;
+      let transport;
+      let statusName = "failed";
 
       try {
         accountNode = RED.nodes.getNode(node.account);
 
         if (!accountNode) {
+          statusName = "missingAccount";
           throw new Error("SMTP account is not configured");
         }
 
@@ -67,24 +87,25 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
           account: accountNode,
           fieldConfig: node.fieldConfig,
         });
-        const transport = createSmtpTransport({
+        transport = createSmtpTransport({
           account: accountNode,
           transportFactory: runtimeOptions.transportFactory,
         });
+        setStatus(node, "sending");
 
-        try {
-          const info = await transport.sendMail(mailOptions);
+        const info = await transport.sendMail(mailOptions);
 
-          msg.smtpEmail = buildSmtpEmailMetadata(info);
-          nodeSend([msg, null]);
-        } finally {
-          closeTransport(transport);
-        }
+        msg.smtpEmail = buildSmtpEmailMetadata(info);
+        setStatus(node, "sent");
+        nodeSend([msg, null]);
       } catch (error) {
         msg.smtpEmail = {
           error: sanitizeErrorMessage(error, getErrorSecrets(accountNode)),
         };
+        setStatus(node, statusName);
         nodeSend([null, msg]);
+      } finally {
+        closeTransport(transport);
       }
 
       if (typeof done === "function") {

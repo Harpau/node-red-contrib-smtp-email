@@ -66,6 +66,15 @@ On success, `msg.smtpEmail` may contain:
 
 On failure, `msg.smtpEmail.error` contains a sanitized error message.
 
+Node status:
+
+| Status | Meaning |
+| --- | --- |
+| `sending` | SMTP send is in progress |
+| `sent` | last send succeeded |
+| `missing account` | SMTP account configuration is missing |
+| `failed` | planning or sending failed; see `msg.smtpEmail.error` |
+
 ## Field Sources
 
 The send node has no global compose or forward mode. Each outgoing email field
