@@ -250,6 +250,7 @@ npm audit
 npm run pack:check
 ```
 
-## License
+## License and Release Notes
 
 This package is available under the [MIT License](LICENSE).
+See [CHANGELOG.md](CHANGELOG.md) for release notes.

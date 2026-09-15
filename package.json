@@ -1,6 +1,6 @@
 {
   "name": "@compeso/node-red-contrib-smtp-email",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "SMTP email send node for Node-RED.",
   "license": "MIT",
   "type": "commonjs",
@@ -8,7 +8,8 @@
     "examples",
     "lib",
     "nodes",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "node --test",

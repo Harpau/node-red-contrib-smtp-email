@@ -55,6 +55,7 @@ test("README documents the required user-facing topics", () => {
     "output 2",
     "No direct dependency on `@compeso/node-red-contrib-imap-email`",
     "[MIT License](LICENSE)",
+    "[CHANGELOG.md](CHANGELOG.md)",
   ]) {
     assert.match(readme, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
