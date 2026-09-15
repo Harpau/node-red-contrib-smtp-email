@@ -66,7 +66,46 @@ On success, `msg.smtpEmail` may contain:
 
 On failure, `msg.smtpEmail.error` contains a sanitized error message.
 
-Node status:
+### Connection check on deploy
+
+Each send node checks its configured SMTP connection when it starts, including
+on Node-RED startup, a full deploy, and a deploy that restarts the node after
+changes to its settings or account credentials. A partial deploy checks only
+the send nodes that restart. Send nodes using the same account share a check
+while it is in progress; later starts perform a new check.
+
+The check verifies the connection, configured TLS settings and, when login
+values are configured, authentication. Authentication must succeed even if the
+server does not advertise AUTH. Accounts without login values can use SMTP
+relays that do not require authentication. The check does not send an email.
+
+Node status during the check:
+
+| Status | Display | Meaning |
+| --- | --- | --- |
+| `connecting` | yellow ring | connection check is in progress |
+| `connected` | green dot | connection and configured authentication succeeded |
+| `auth failed` | red ring | configured authentication failed or is unavailable |
+| `host not found` | red ring | SMTP hostname could not be resolved |
+| `connection failed` | red ring | connection was refused, interrupted or failed |
+| `TLS error` | red ring | TLS negotiation or certificate validation failed |
+| `timeout` | red ring | the connection check exceeded its time limit |
+| `missing account` | red ring | SMTP account configuration is missing |
+| `invalid account` | red ring | SMTP account configuration is incomplete or invalid |
+
+`connected` describes the last successful check. The test connection is closed
+afterwards; this is not a persistent connection or a guarantee of future
+availability, acceptance of a particular email or final delivery. The status
+waits at most 15 seconds for the check. Separate network timeouts limit the
+underlying connection work; cancellation does not guarantee that an in-flight
+connection closes immediately.
+
+The check is asynchronous, produces no output messages and does not change the
+send counts. A failed check does not block later send attempts. Results from
+closed or redeployed nodes are discarded. Once the node receives its first
+message, sending controls the status; a late check result cannot overwrite it.
+
+Node status after a message arrives:
 
 | Status | Meaning |
 | --- | --- |
@@ -74,7 +113,6 @@ Node status:
 | `sent N` | last send succeeded; volatile sent count |
 | `failed N` | planning or sending failed; volatile failed count |
 | `sent N, failed M` | both counts are shown after mixed outcomes |
-| `missing account` | SMTP account configuration is missing |
 
 The sent and failed counts are kept in memory per node instance and reset on
 deploy or restart. Status text does not include SMTP hosts, account values,

@@ -5,6 +5,8 @@ const test = require("node:test");
 
 const registerSmtpEmailSendNode = require("../nodes/smtp-email-send");
 
+const STATUS_CONNECTING = { fill: "yellow", shape: "ring", text: "connecting" };
+const STATUS_CONNECTED = { fill: "green", shape: "dot", text: "connected" };
 const STATUS_MISSING_ACCOUNT = { fill: "red", shape: "ring", text: "missing account" };
 const STATUS_SENDING = { fill: "blue", shape: "dot", text: "sending" };
 
@@ -48,10 +50,10 @@ function createFakeRed({ accountNode } = {}) {
   };
 }
 
-function createSendNode({ accountNode, transportFactory, config = {} }) {
+function createSendNode({ accountNode, transportFactory, verifyAccount = async () => "connected", config = {} }) {
   const { RED, registeredTypes } = createFakeRed({ accountNode });
 
-  registerSmtpEmailSendNode(RED, { transportFactory });
+  registerSmtpEmailSendNode(RED, { transportFactory, verifyAccount });
 
   const NodeConstructor = registeredTypes.get("smtp-email send");
   const node = new NodeConstructor({
@@ -133,6 +135,221 @@ function assertStatusTextsDoNotExposeSecrets(statusCalls) {
   }
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, resolve, reject };
+}
+
+test("smtp send node verifies its configured account on start without sending a message", async () => {
+  const verification = deferred();
+  const accountNode = createAccountNode();
+  const transportFactory = () => assert.fail("the injected verifier must control the probe transport");
+  let verificationOptions;
+  const node = createSendNode({
+    accountNode,
+    transportFactory,
+    verifyAccount(options) {
+      verificationOptions = options;
+      return verification.promise;
+    },
+  });
+
+  assert.equal(verificationOptions.account, accountNode);
+  assert.equal(verificationOptions.transportFactory, transportFactory);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING]);
+  assert.deepEqual(node.sentMessages, []);
+
+  verification.resolve("connected");
+  await Promise.resolve();
+
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_CONNECTED]);
+  assert.deepEqual(node.sentMessages, []);
+  assert.equal(node.sentCount, 0);
+  assert.equal(node.failedCount, 0);
+});
+
+for (const result of ["auth failed", "host not found", "connection failed", "TLS error", "timeout", "invalid account"]) {
+  test(`smtp send node displays ${result} for a failed deploy check`, async () => {
+    const node = createSendNode({
+      accountNode: createAccountNode(),
+      verifyAccount: async () => result,
+    });
+
+    await Promise.resolve();
+
+    assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, failedStatus(result)]);
+    assert.deepEqual(node.sentMessages, []);
+    assert.equal(node.sentCount, 0);
+    assert.equal(node.failedCount, 0);
+    assertStatusTextsDoNotExposeSecrets(node.statusCalls);
+  });
+}
+
+test("smtp send node immediately displays a missing account without attempting verification", () => {
+  const node = createSendNode({
+    accountNode: null,
+    verifyAccount() {
+      assert.fail("a missing account must not be verified");
+    },
+  });
+
+  assert.deepEqual(node.statusCalls, [STATUS_MISSING_ACCOUNT]);
+  assert.deepEqual(node.sentMessages, []);
+  assert.equal(node.sentCount, 0);
+  assert.equal(node.failedCount, 0);
+});
+
+test("smtp send node hides unexpected verifier errors and results", async () => {
+  const privateDetails = "test-user/test-password@smtp.example.invalid";
+  const verifiers = [
+    () => { throw new Error(privateDetails); },
+    async () => { throw new Error(privateDetails); },
+    async () => privateDetails,
+  ];
+
+  for (const verifyAccount of verifiers) {
+    const node = createSendNode({ accountNode: createAccountNode(), verifyAccount });
+
+    await Promise.resolve();
+
+    assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, failedStatus("connection failed")]);
+    assert.deepEqual(node.sentMessages, []);
+    assertStatusTextsDoNotExposeSecrets(node.statusCalls);
+  }
+});
+
+test("smtp send node can send after an unsuccessful deploy check", async () => {
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: { toSource: "str", toValue: "recipient@example.invalid" },
+    verifyAccount: async () => "auth failed",
+    transportFactory() {
+      return { async sendMail() { return { messageId: "message-id" }; } };
+    },
+  });
+
+  await Promise.resolve();
+  const msg = createImapMessage();
+  const { sentMessages } = await runInput(node, msg);
+
+  assert.deepEqual(node.statusCalls, [
+    STATUS_CONNECTING,
+    failedStatus("auth failed"),
+    STATUS_SENDING,
+    sentStatus("sent 1"),
+  ]);
+  assert.deepEqual(sentMessages, [[msg, null]]);
+  assert.equal(node.sentCount, 1);
+  assert.equal(node.failedCount, 0);
+});
+
+test("smtp send node ignores a deploy result while a send is pending", async () => {
+  const verification = deferred();
+  const delivery = deferred();
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: { toSource: "str", toValue: "recipient@example.invalid" },
+    verifyAccount: () => verification.promise,
+    transportFactory() {
+      return { sendMail: () => delivery.promise };
+    },
+  });
+  const msg = createImapMessage();
+  const sending = runInput(node, msg);
+
+  verification.resolve("connected");
+  await Promise.resolve();
+
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING]);
+  delivery.resolve({ messageId: "message-id" });
+  assert.deepEqual((await sending).sentMessages, [[msg, null]]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
+});
+
+test("smtp send node ignores a deploy result after a completed send", async () => {
+  const verification = deferred();
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: { toSource: "str", toValue: "recipient@example.invalid" },
+    verifyAccount: () => verification.promise,
+    transportFactory() {
+      return { async sendMail() { return { messageId: "message-id" }; } };
+    },
+  });
+
+  await runInput(node, createImapMessage());
+  verification.resolve("timeout");
+  await Promise.resolve();
+
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
+  assert.equal(node.failedCount, 0);
+});
+
+test("smtp send node ignores a deploy result after message validation fails", async () => {
+  const verification = deferred();
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    verifyAccount: () => verification.promise,
+  });
+  const msg = createImapMessage();
+
+  assert.deepEqual((await runInput(node, msg)).sentMessages, [[null, msg]]);
+  verification.resolve("connected");
+  await Promise.resolve();
+
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, failedStatus("failed 1")]);
+  assert.equal(node.failedCount, 1);
+});
+
+test("closing a sender ignores its pending shared deploy check while another sender receives the result", async () => {
+  const verification = deferred();
+  const options = {
+    accountNode: createAccountNode(),
+    verifyAccount: () => verification.promise,
+  };
+  const closedNode = createSendNode(options);
+  const activeNode = createSendNode(options);
+  let closeDoneCalls = 0;
+
+  closedNode.handlers.get("close")(false, () => { closeDoneCalls += 1; });
+  verification.resolve("connected");
+  await Promise.resolve();
+
+  assert.equal(closeDoneCalls, 1);
+  assert.deepEqual(closedNode.statusCalls, [STATUS_CONNECTING]);
+  assert.deepEqual(activeNode.statusCalls, [STATUS_CONNECTING, STATUS_CONNECTED]);
+  assert.deepEqual(closedNode.sentMessages, []);
+  assert.deepEqual(activeNode.sentMessages, []);
+});
+
+test("a newly deployed sender starts another check and ignores the old instance result", async () => {
+  const oldVerification = deferred();
+  const newVerification = deferred();
+  const oldNode = createSendNode({
+    accountNode: createAccountNode(),
+    verifyAccount: () => oldVerification.promise,
+  });
+
+  oldNode.handlers.get("close")(true, () => {});
+  const newNode = createSendNode({
+    accountNode: createAccountNode(),
+    verifyAccount: () => newVerification.promise,
+  });
+  newVerification.resolve("connected");
+  await Promise.resolve();
+  oldVerification.resolve("auth failed");
+  await Promise.resolve();
+
+  assert.deepEqual(oldNode.statusCalls, [STATUS_CONNECTING]);
+  assert.deepEqual(newNode.statusCalls, [STATUS_CONNECTING, STATUS_CONNECTED]);
+});
+
 test("smtp send node sends mapped fields through an injected transport", async () => {
   const ackToken = { id: "ack-token" };
   const attachment = { filename: "note.txt", content: "hello" };
@@ -200,7 +417,7 @@ test("smtp send node sends mapped fields through an injected transport", async (
   assert.equal(transportClosed, true);
   assert.deepEqual(sentMessages, [[msg, null]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
   assert.deepEqual(msg.smtpEmail, {
     messageId: "message-id",
     accepted: ["new-recipient@example.invalid"],
@@ -240,14 +457,14 @@ test("smtp send node shows sending while sendMail is pending", async () => {
   const inputPromise = runInput(node, msg);
 
   await sendMailStartedPromise;
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING]);
 
   resolveSendMail({ messageId: "message-id" });
   const { sentMessages, doneCalls } = await inputPromise;
 
   assert.deepEqual(sentMessages, [[msg, null]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
 });
 
 test("smtp send node counts repeated successful sends per node instance", async () => {
@@ -274,6 +491,7 @@ test("smtp send node counts repeated successful sends per node instance", async 
 
   assert.equal(sendCalls, 2);
   assert.deepEqual(node.statusCalls, [
+    STATUS_CONNECTING,
     STATUS_SENDING,
     sentStatus("sent 1"),
     STATUS_SENDING,
@@ -315,6 +533,7 @@ test("smtp send node shows sent and failed counts after mixed outcomes", async (
   assert.deepEqual((await runInput(node, third)).sentMessages, [[third, null]]);
 
   assert.deepEqual(node.statusCalls, [
+    STATUS_CONNECTING,
     STATUS_SENDING,
     sentStatus("sent 1"),
     STATUS_SENDING,
@@ -348,6 +567,7 @@ test("smtp send node counts repeated planning failures without sending status", 
 
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(node.statusCalls, [
+    STATUS_CONNECTING,
     failedStatus("failed 1"),
     failedStatus("failed 2"),
   ]);
@@ -385,8 +605,8 @@ test("smtp send node keeps status counts isolated per node instance", async () =
   await runInput(firstNode, createImapMessage());
   await runInput(secondNode, createImapMessage());
 
-  assert.deepEqual(firstNode.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
-  assert.deepEqual(secondNode.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+  assert.deepEqual(firstNode.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
+  assert.deepEqual(secondNode.statusCalls, [STATUS_CONNECTING, STATUS_CONNECTED, STATUS_SENDING, sentStatus("sent 1")]);
   assert.equal(firstNode.sentCount, 1);
   assert.equal(secondNode.sentCount, 1);
 });
@@ -430,7 +650,7 @@ test("smtp send node can send fixed string content fields", async () => {
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0][1], null);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
 });
 
 test("smtp send node does not automatically use legacy mode msg.to or msg.payload", async () => {
@@ -456,7 +676,7 @@ test("smtp send node does not automatically use legacy mode msg.to or msg.payloa
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [failedStatus("failed 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, failedStatus("failed 1")]);
   assert.match(msg.smtpEmail.error, /Missing configured email recipient/);
   assert.equal(msg.imap.ackToken, ackToken);
 });
@@ -482,7 +702,7 @@ test("smtp send node routes attachment string configuration errors to failure ou
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [failedStatus("failed 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, failedStatus("failed 1")]);
   assert.match(msg.smtpEmail.error, /Attachments cannot be configured as a fixed string/);
 });
 
@@ -514,7 +734,7 @@ test("smtp send node routes transport errors to failure output with sanitized te
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.equal(sentMessages.length, 1);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, failedStatus("failed 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, failedStatus("failed 1")]);
   assertStatusTextsDoNotExposeSecrets(node.statusCalls);
   assert.equal(msg.smtpEmail.error, "Login failed for [redacted] using [redacted] at [redacted]");
   assert.doesNotMatch(msg.smtpEmail.error, /test-password|test-user|smtp\.example\.invalid/);
@@ -551,7 +771,7 @@ test("smtp send node ignores close errors after successful send", async () => {
   assert.equal(closeCalled, true);
   assert.deepEqual(sentMessages, [[msg, null]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_SENDING, sentStatus("sent 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
   assert.equal(msg.smtpEmail.messageId, "message-id");
   assert.equal(msg.smtpEmail.error, undefined);
 });
@@ -575,7 +795,7 @@ test("smtp send node routes missing accounts to the failure output", async () =>
   assert.equal(transportFactoryCalled, false);
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [STATUS_MISSING_ACCOUNT]);
+  assert.deepEqual(node.statusCalls, [STATUS_MISSING_ACCOUNT, STATUS_MISSING_ACCOUNT]);
   assert.equal(node.sentCount, 0);
   assert.equal(node.failedCount, 0);
   assert.equal(msg.smtpEmail.error, "SMTP account is not configured");
@@ -598,7 +818,7 @@ test("smtp send node sanitizes transport factory errors", async () => {
 
   assert.deepEqual(sentMessages, [[null, msg]]);
   assert.deepEqual(doneCalls, [undefined]);
-  assert.deepEqual(node.statusCalls, [failedStatus("failed 1")]);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, failedStatus("failed 1")]);
   assertStatusTextsDoNotExposeSecrets(node.statusCalls);
   assert.equal(msg.smtpEmail.error, "Factory failed for [redacted]/[redacted]@[redacted]");
 });

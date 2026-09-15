@@ -127,4 +127,14 @@
   <p>For messages from <code>imap email in</code>, defaults read subject, bodies and attachments from <code>msg.email</code>. Recipient fields are empty by default to avoid sending to original recipients by accident.</p>
   <p>Fixed string attachments are not interpreted; leave the field empty or read attachments from a <code>msg</code> path.</p>
   <p>Output 1 is reserved for successful sends. Output 2 is reserved for failed sends.</p>
+  <h3>Connection check</h3>
+  <p>Each send node checks its SMTP connection when it starts, including after a deploy that restarts it following node, account or credential changes. Full deploys and Node-RED startup check all send nodes; partial deploys check the nodes that restart. Nodes sharing an account share a check while it is in progress; later starts check again.</p>
+  <p>The check verifies connection, configured TLS settings and configured authentication without sending an email. Configured login values require successful authentication, including when the server does not advertise AUTH. Accounts without login values can use relays that do not require authentication.</p>
+  <ul>
+    <li>Yellow ring: <code>connecting</code>.</li>
+    <li>Green dot: <code>connected</code>.</li>
+    <li>Red ring: <code>auth failed</code>, <code>host not found</code>, <code>connection failed</code>, <code>TLS error</code>, <code>timeout</code>, <code>missing account</code> or <code>invalid account</code>.</li>
+  </ul>
+  <p><code>connected</code> records the last successful check. The test connection closes afterwards; it does not guarantee continued availability or email delivery. The status waits at most 15 seconds. Separate network timeouts limit the connection attempt, which may not close immediately when cancelled. Status messages contain no credentials, private server addresses or raw SMTP responses.</p>
+  <p>Checks produce no output messages, do not change send counts and do not block sending after a failed check. Results from closed or redeployed nodes are discarded. The first incoming message gives control of status to sending: <code>sending</code>, <code>sent N</code>, <code>failed N</code> or <code>sent N, failed M</code>. A late check result cannot overwrite that status. Counts reset on deploy or restart.</p>
 </script>

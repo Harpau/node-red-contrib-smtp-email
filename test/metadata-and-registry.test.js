@@ -95,6 +95,7 @@ test("registered runtime files can be loaded and register their node types", () 
     const createdNodes = [];
     const fakeRed = {
       nodes: {
+        getNode() { return null; },
         createNode(node, config) {
           createdNodes.push({ node, config });
           node.on = function onNodeEvent() {};

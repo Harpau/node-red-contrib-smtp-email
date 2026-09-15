@@ -1,14 +1,25 @@
 "use strict";
 
 const { MAIL_FIELDS, buildMailOptions } = require("../lib/mail-options");
-const { createSmtpTransport, sanitizeErrorMessage } = require("../lib/smtp-transport");
+const { createSmtpTransport, sanitizeErrorMessage, verifySmtpAccount } = require("../lib/smtp-transport");
 
 const STATUS = Object.freeze({
+  connecting: Object.freeze({ fill: "yellow", shape: "ring", text: "connecting" }),
   failed: Object.freeze({ fill: "red", shape: "ring", text: "failed" }),
   missingAccount: Object.freeze({ fill: "red", shape: "ring", text: "missing account" }),
   sending: Object.freeze({ fill: "blue", shape: "dot", text: "sending" }),
   sent: Object.freeze({ fill: "green", shape: "dot", text: "sent" }),
 });
+
+const VERIFICATION_STATUS_TEXTS = new Set([
+  "connected",
+  "auth failed",
+  "host not found",
+  "connection failed",
+  "TLS error",
+  "timeout",
+  "invalid account",
+]);
 
 function getErrorSecrets(account) {
   if (!account || typeof account !== "object") {
@@ -93,8 +104,11 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
     this.buildMailOptions = buildMailOptions;
     this.sentCount = 0;
     this.failedCount = 0;
+    let closed = false;
+    let receivedInput = false;
 
     this.on("input", async function handleInput(msg, send, done) {
+      receivedInput = true;
       const nodeSend = typeof send === "function" ? send : node.send.bind(node);
       let accountNode;
       let transport;
@@ -144,6 +158,50 @@ module.exports = function registerSmtpEmailSendNode(RED, runtimeOptions = {}) {
         done();
       }
     });
+
+    this.on("close", function handleClose(removed, done) {
+      closed = true;
+
+      if (typeof done === "function") {
+        done();
+      }
+    });
+
+    async function verifyOnStart() {
+      const accountNode = RED.nodes.getNode(node.account);
+
+      if (!accountNode) {
+        setStatus(node, "missingAccount");
+        return;
+      }
+
+      setStatus(node, "connecting");
+      let result;
+
+      try {
+        const verifyAccount = runtimeOptions.verifyAccount || verifySmtpAccount;
+        result = await verifyAccount({
+          account: accountNode,
+          transportFactory: runtimeOptions.transportFactory,
+        });
+      } catch {
+        result = "connection failed";
+      }
+
+      // A deploy probe must never replace a send result or update a closed node.
+      if (closed || receivedInput || typeof node.status !== "function") {
+        return;
+      }
+
+      const text = VERIFICATION_STATUS_TEXTS.has(result) ? result : "connection failed";
+      node.status({
+        fill: text === "connected" ? "green" : "red",
+        shape: text === "connected" ? "dot" : "ring",
+        text,
+      });
+    }
+
+    void verifyOnStart();
   }
 
   RED.nodes.registerType("smtp-email send", SmtpEmailSendNode);
