@@ -350,6 +350,32 @@ test("a newly deployed sender starts another check and ignores the old instance 
   assert.deepEqual(newNode.statusCalls, [STATUS_CONNECTING, STATUS_CONNECTED]);
 });
 
+test("smtp send node treats partial recipient acceptance as success and preserves the IMAP ack token", async () => {
+  const accepted = ["accepted@example.invalid"];
+  const rejected = ["rejected@example.invalid"];
+  const info = { messageId: "partially-accepted", accepted, rejected, response: "250 queued" };
+  const node = createSendNode({
+    accountNode: createAccountNode(),
+    config: { toSource: "str", toValue: [...accepted, ...rejected].join(", ") },
+    transportFactory() {
+      return { async sendMail() { return info; } };
+    },
+  });
+  const msg = createImapMessage();
+  const imap = msg.imap;
+  const ackToken = msg.imap.ackToken;
+  const { sentMessages, doneCalls } = await runInput(node, msg);
+
+  assert.deepEqual(sentMessages, [[msg, null]]);
+  assert.deepEqual(doneCalls, [undefined]);
+  assert.deepEqual(msg.smtpEmail, info);
+  assert.equal(msg.imap, imap);
+  assert.equal(msg.imap.ackToken, ackToken);
+  assert.equal(node.sentCount, 1);
+  assert.equal(node.failedCount, 0);
+  assert.deepEqual(node.statusCalls, [STATUS_CONNECTING, STATUS_SENDING, sentStatus("sent 1")]);
+});
+
 test("smtp send node sends mapped fields through an injected transport", async () => {
   const ackToken = { id: "ack-token" };
   const attachment = { filename: "note.txt", content: "hello" };

@@ -184,6 +184,11 @@ In this flow, SMTP output 1 goes to `imap email ack`. SMTP output 2 goes to a
 debug node. Do not wire the failure output to an IMAP acknowledgement node,
 otherwise an original email could be acknowledged after a failed forward.
 
+Partial recipient acceptance is a successful send: output 1 can trigger the
+IMAP acknowledgement even when some recipients are rejected. The example's
+acknowledgement deletes the original email in this case. This is intentional;
+see [Delivery Semantics](#delivery-semantics) for details.
+
 `msg.imap` belongs to the IMAP package. `smtp email send` keeps the original
 message object moving through the flow and does not remove or replace
 `msg.imap.ackToken`.
@@ -196,6 +201,19 @@ On successful send:
 - `msg.imap` is preserved
 - `msg.imap.ackToken` is preserved
 - `msg.smtpEmail` contains SMTP result metadata
+
+SMTP acceptance is not a guarantee of final delivery. If the SMTP server accepts
+at least one recipient and Nodemailer reports a successful send, the node uses
+output 1 and increments the sent count, even if other recipients were rejected.
+Accepted recipients are listed in `msg.smtpEmail.accepted`; rejected recipients
+are listed in `msg.smtpEmail.rejected`.
+
+For example, a result with `accepted: ["recipient@example.invalid"]` and
+`rejected: ["other@example.invalid"]` still uses output 1. A downstream
+`imap email ack` can therefore delete, move or flag the original email despite
+those rejected recipients. This behavior is intentional. Flows that require
+acceptance for every recipient can inspect `msg.smtpEmail.rejected` before
+acknowledging the original email.
 
 On failed send:
 

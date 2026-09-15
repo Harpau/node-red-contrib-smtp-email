@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "Forward IMAP email via SMTP",
     "disabled": false,
-    "info": ""
+    "info": "Configure both accounts and the new recipient in Node-RED before deploying. The SMTP send node checks its connection when it starts. A connected status records a successful check, not guaranteed email delivery. The check sends no email and never triggers IMAP acknowledgement.\n\nOutput 1 acknowledges and deletes the original email after SMTP reports success. Partial recipient acceptance is intentionally treated as success: if at least one recipient is accepted, rejected recipients in msg.smtpEmail.rejected do not prevent this acknowledgement. Inspect that list before acknowledgement if your flow requires acceptance for every recipient. Output 2 is for failures and must not be wired to the IMAP acknowledgement node. msg.imap.ackToken is preserved unchanged."
   },
   {
     "id": "imap-account-placeholder",

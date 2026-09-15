@@ -137,4 +137,7 @@
   </ul>
   <p><code>connected</code> records the last successful check. The test connection closes afterwards; it does not guarantee continued availability or email delivery. The status waits at most 15 seconds. Separate network timeouts limit the connection attempt, which may not close immediately when cancelled. Status messages contain no credentials, private server addresses or raw SMTP responses.</p>
   <p>Checks produce no output messages, do not change send counts and do not block sending after a failed check. Results from closed or redeployed nodes are discarded. The first incoming message gives control of status to sending: <code>sending</code>, <code>sent N</code>, <code>failed N</code> or <code>sent N, failed M</code>. A late check result cannot overwrite that status. Counts reset on deploy or restart.</p>
+  <h3>Delivery and IMAP forwarding</h3>
+  <p>If SMTP accepts at least one recipient and reports a successful send, output 1 is used even when other recipients are rejected. Inspect <code>msg.smtpEmail.accepted</code> and <code>msg.smtpEmail.rejected</code> for the result. SMTP acceptance does not guarantee final delivery.</p>
+  <p>The original message and <code>msg.imap.ackToken</code> are preserved. A downstream <code>imap email ack</code> on output 1 may intentionally delete, move or flag the original email after partial recipient acceptance. Output 2 must not be wired to that acknowledgement path.</p>
 </script>
