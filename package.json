@@ -2,6 +2,7 @@
   "name": "@compeso/node-red-contrib-smtp-email",
   "version": "0.1.0",
   "description": "SMTP email send node for Node-RED.",
+  "license": "MIT",
   "type": "commonjs",
   "files": [
     "examples",
@@ -20,7 +21,7 @@
     "mail"
   ],
   "dependencies": {
-    "nodemailer": "^9.0.1"
+    "nodemailer": "^9.1.1"
   },
   "engines": {
     "node": ">=22.0.0",
@@ -38,6 +39,7 @@
     "access": "public"
   },
   "node-red": {
+    "version": ">=4.0.0",
     "nodes": {
       "smtp-email account": "nodes/smtp-email-account.js",
       "smtp-email send": "nodes/smtp-email-send.js"

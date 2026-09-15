@@ -190,5 +190,10 @@ Before larger changes, run:
 ```bash
 npm install
 npm test
+npm audit
 npm run pack:check
 ```
+
+## License
+
+This package is available under the [MIT License](LICENSE).

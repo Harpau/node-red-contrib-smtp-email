@@ -8,6 +8,7 @@ const test = require("node:test");
 const rootDir = path.resolve(__dirname, "..");
 const packageJsonPath = path.join(rootDir, "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+const packageLock = JSON.parse(fs.readFileSync(path.join(rootDir, "package-lock.json"), "utf8"));
 
 const expectedNodeTypes = ["smtp-email account", "smtp-email send"];
 
@@ -41,12 +42,20 @@ function getEditorRegistrationSource(htmlSource, nodeType) {
 
 test("package.json contains the expected package metadata", () => {
   assert.equal(packageJson.name, "@compeso/node-red-contrib-smtp-email");
-  assert.equal(packageJson.version, "0.1.0");
+  assert.match(packageJson.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+  assert.equal(packageLock.version, packageJson.version);
+  assert.equal(packageLock.packages[""].version, packageJson.version);
+  assert.deepEqual(packageLock.packages[""].dependencies, packageJson.dependencies);
+  assert.equal(packageJson.license, "MIT");
+  assert.equal(packageLock.packages[""].license, packageJson.license);
+  assert.match(readProjectFile("LICENSE"), /MIT License/);
+  assert.match(readProjectFile("LICENSE"), /Copyright \(c\) 2026 Harald Paulus/);
   assert.equal(packageJson.description, "SMTP email send node for Node-RED.");
   assert.equal(packageJson.type, "commonjs");
 
   assert.equal(packageJson.engines.node, ">=22.0.0");
   assert.equal(packageJson.engines["node-red"], ">=4.0.0");
+  assert.equal(packageJson["node-red"].version, packageJson.engines["node-red"]);
 
   assert.equal(
     packageJson.repository.url,
