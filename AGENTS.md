@@ -1,5 +1,13 @@
 # AGENTS.md
 
+## Einstieg fuer neue Chats
+
+- Zuerst [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) lesen: bestaetigter Release-Stand, Entscheidungen, Testnachweise und deren Grenzen.
+- Vor Release-Arbeiten [docs/RELEASING.md](docs/RELEASING.md) lesen.
+- Danach `git status --short --branch`, `git log -5 --oneline`, `package.json` und `CHANGELOG.md` pruefen. Lokale Aenderungen nicht ueberschreiben.
+- Der dokumentierte Release-Stand ist eine datierte Momentaufnahme. Aktuelle npm-Versionen, Sicherheitsmeldungen und GitHub-Zustaende bei Bedarf neu abfragen.
+- README.md beschreibt das oeffentliche Verhalten; diese Datei beschreibt die Arbeitsregeln. Abgeschlossene Releases und die historische Roadmap sind keine offenen Aufgaben.
+
 ## Projektziel
 
 Dieses Repository ist ein eigenstaendiges Node-RED npm-Paket fuer SMTP-basierten E-Mail-Versand.
@@ -13,7 +21,7 @@ Dieses Repository ist ein eigenstaendiges Node-RED npm-Paket fuer SMTP-basierten
   - smtp email account
   - smtp email send
 
-## Zielarchitektur
+## Architektur
 
 Das Paket stellt einen SMTP-Send-Node fuer Node-RED bereit.
 
@@ -21,7 +29,7 @@ Der Versand erfolgt ueber SMTP. Empfang, IMAP-Zugriff und IMAP-Acknowledgement g
 
 Eine ueber `imap email in` empfangene Mail soll jedoch einfach ueber `smtp email send` weitergeleitet werden koennen. Dabei muss `msg.imap.ackToken` unveraendert erhalten bleiben, damit nach erfolgreichem Versand ein nachgeschalteter `imap email ack` Node die urspruengliche Mail loeschen, verschieben oder flaggen kann.
 
-## Ziel-Nodes fuer die oeffentliche Version
+## Oeffentliche Nodes
 
 ### smtp-email account
 
@@ -103,7 +111,7 @@ Ausgabe bei Erfolg:
 - unveraendertes `msg.imap`
 - zusaetzliches `msg.smtpEmail` mit Versandinformationen
 
-Empfohlene Ausgaenge:
+Ausgaenge:
 
 - Ausgang 1: Versand erfolgreich
 - Ausgang 2: Versand fehlgeschlagen
@@ -141,14 +149,16 @@ Bei fehlgeschlagenem Versand darf die Message nicht versehentlich an den Ack-Pfa
 
 - Node.js-Mindestversion: >=22.0.0
 - Node-RED-Mindestversion: >=4.0.0
-- Die Entwicklungsfassung beginnt mit Version 0.1.0.
-- Eine oeffentliche Version 1.0.0 erst nach erfolgreichem lokalen Node-RED-Test und Dokumentationspruefung vorbereiten.
+- Die Erstimplementierung und der Wechsel auf eine stabile 1.x-Version sind abgeschlossen; den zuletzt bestaetigten Stand nennt docs/PROJECT_STATUS.md.
+- Vor neuen oeffentlichen Releases lokale Tests, einen passenden Node-RED-Praxistest und die Dokumentation pruefen; siehe docs/RELEASING.md.
+- Versionen in package.json und package-lock.json muessen uebereinstimmen. Bereits veroeffentlichte Versionen und Release-Tags nicht ueberschreiben.
 
 ## package.json-Regeln
 
 - `package.json` name muss lauten: `@compeso/node-red-contrib-smtp-email`
 - repository, homepage und bugs muessen auf `Harpau/node-red-contrib-smtp-email` zeigen, sofern nicht ausdruecklich anders vorgegeben.
 - `package.json` muss eine gueltige `node-red`-Sektion enthalten.
+- `node-red.version` muss die Node-RED-Mindestversion ebenso deklarieren wie `engines.node-red`.
 - Alle Eintraege in `node-red.nodes` muessen auf existierende JavaScript-Dateien zeigen.
 - Alle Node-RED-Typen in package.json, JavaScript und HTML muessen konsistent sein.
 - `publishConfig.access` darf `public` bleiben.
@@ -212,20 +222,12 @@ Tests muessen insbesondere abdecken:
 - CC, BCC und Reply-To
 - keine Zugangsdaten in Fehlern oder Logs
 
-## Umsetzungs-Roadmap
+## Abgeschlossene Entwicklung
 
-Die Entwicklung soll in kleinen, reviewbaren Schritten erfolgen:
-
-1. `package.json` mit Metadaten, Node.js >=22.0.0, Node-RED >=4.0.0 und Node-RED-Registry fuer `smtp-email account` und `smtp-email send` anlegen.
-2. Minimale Node-Dateien fuer `smtp-email account` und `smtp-email send` anlegen, sodass Node-RED die Typen laden kann.
-3. Tests fuer package.json-Metadaten, Registry, JS-/HTML-Typkonsistenz und ladbare Node-Dateien ergaenzen.
-4. SMTP-Account-Credentials sicher ueber Node-RED-Credentials modellieren.
-5. Send-Planung fuer feldbasierte Konfiguration ohne echte SMTP-Verbindung testen.
-6. IMAP-nahe Standardpfade testen, besonders mit unveraendertem `msg.imap.ackToken`.
-7. SMTP-Transport mit gemocktem oder testbarem Transport integrieren.
-8. Erfolgspfad, Fehlerpfad, Attachments, CC, BCC und Reply-To testen.
-9. Beispiel-Flow fuer `imap email in -> smtp email send -> imap email ack` in `examples` ergaenzen.
-10. README mit Installation, feldbasierter Konfiguration, IMAP-Weiterleitung, Delivery-Semantik und Grenzen ausbauen.
+- Die urspruengliche Roadmap ist umgesetzt: Paketmetadaten, Registry, Account-Credentials, feldbasierte Send-Planung, SMTP-Versand, getrennte Ausgaenge, Tests, Beispiel-Flow und README sind vorhanden.
+- Die SMTP-Pruefung beim Start/Deploy und die Versandzaehler sind implementiert. Die in README.md dokumentierte Status-Prioritaet und die Fehlerbehandlung bei Aenderungen erhalten.
+- Teilweise Empfaengerannahme ist bewusst ein Versandserfolg; ein nachgeschalteter IMAP-Ack darf damit ausgeloest werden. Nicht ohne neuen Auftrag in einen Fehler umdeuten.
+- Weitere Arbeit richtet sich nach dem aktuellen Benutzerauftrag. OAuth2 und andere Nicht-Ziele sind keine automatisch abzuarbeitende Fortsetzung.
 
 ## Arbeitsweise fuer Codex
 
@@ -241,4 +243,4 @@ Die Entwicklung soll in kleinen, reviewbaren Schritten erfolgen:
   - offene Risiken
   - empfohlener naechster Commit
 - Keine neuen produktiven Abhaengigkeiten hinzufuegen, ohne vorher den Grund zu erklaeren.
-- Keine Veroeffentlichung auf npm oder flows.nodered.org durchfuehren.
+- Commit, Push, Release-Tag, GitHub-Release, npm-Publish und Katalogaktualisierung nur im jeweils beauftragten Umfang durchfuehren. Vorhandene ausdrueckliche Freigaben im aktuellen Auftrag beruecksichtigen; dokumentierte Freigaben abgeschlossener Releases sind keine pauschale Freigabe fuer neue Releases.
