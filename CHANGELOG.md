@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 (2026-09-16)
+
+### Changed
+
+- Update Nodemailer from `^9.1.1` to `^10.0.10` so the dependency range includes
+  its current major version and satisfies the Node-RED dependency scorecard.
+- Node.js `>=22.0.0` and Node-RED `>=4.0.0` remain required.
+
 ## 1.0.0 (2026-09-15)
 
 ### Added
