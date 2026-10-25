@@ -2,6 +2,7 @@
 
 const assert = require("node:assert/strict");
 const net = require("node:net");
+const tls = require("node:tls");
 const test = require("node:test");
 
 const { verifySmtpAccount } = require("../lib/smtp-transport");
@@ -92,6 +93,13 @@ async function startSmtpFixture(t, { advertiseAuth = true } = {}) {
     },
   };
 }
+
+// Creating the first secure context in a process loads the certificate store,
+// which can take about a second while the test files run in parallel. Pay that
+// cost here so the TLS test below measures only the verification itself.
+test.before(() => {
+  tls.createSecureContext();
+});
 
 function assertNoMessageSent(commands) {
   assert.equal(commands.includes("MAIL"), false);

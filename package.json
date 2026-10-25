@@ -1,6 +1,6 @@
 {
   "name": "@compeso/node-red-contrib-smtp-email",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "SMTP email send node for Node-RED.",
   "license": "MIT",
   "type": "commonjs",
@@ -22,7 +22,7 @@
     "mail"
   ],
   "dependencies": {
-    "nodemailer": "^10.0.10"
+    "nodemailer": "^10.2.1"
   },
   "engines": {
     "node": ">=22.0.0",

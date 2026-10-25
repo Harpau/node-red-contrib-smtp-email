@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.2 (2026-10-25)
+
+### Security
+
+- Update Nodemailer from `^10.0.10` to `^10.2.1`. Nodemailer versions before
+  10.1.4 contain address parser defects (GHSA-85x2-q946-cp5h,
+  GHSA-m943-m63m-w62w, GHSA-8c8m-p3m8-cjg8) where crafted addresses in
+  `to`, `cc` or `bcc` could resolve to a recipient domain the header does
+  not name. Because recipient fields may be read from `msg` paths, including
+  headers of received email, the dependency range now excludes affected
+  versions.
+- No runtime code of this package changed. Node.js `>=22.0.0` and Node-RED
+  `>=4.0.0` remain required.
+
 ## 1.0.1 (2026-09-16)
 
 ### Changed
