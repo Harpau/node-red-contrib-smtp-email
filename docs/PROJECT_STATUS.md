@@ -77,8 +77,13 @@ liess. Das aendert nichts am Paketinhalt.
 
 Lehre aus beiden Patchreleases: `npm audit` **und** `npm outdated` regelmaessig
 pruefen, nicht nur vor einem Release. Die Advisories erschienen fuenf Wochen nach
-1.0.1; eine automatische Pruefung (CI, Dependabot) gibt es im Repository bisher
-nicht.
+1.0.1 und blieben unbemerkt, weil nichts automatisch pruefte. Seit dem
+26. Oktober 2026 fuehrt GitHub Actions (`.github/workflows/ci.yml`) bei jedem
+Push auf `main` und jedem Pull Request `npm ci`, `npm test`,
+`npm audit --audit-level=moderate` und `npm run pack:check` auf Node.js 22, 24
+und 26 aus, und Dependabot (`.github/dependabot.yml`) prueft woechentlich
+Nodemailer und die verwendeten Actions. Beides laeuft nur im Repository: der
+Node-RED-Praxistest und die Veroeffentlichung bleiben manuelle Schritte.
 
 ## Bewusst festgelegtes Verhalten
 
@@ -177,9 +182,10 @@ bestanden worden.
 | `lib/smtp-transport.js` | Transport, Verbindungspruefung, Timeouts und sichere Fehler |
 | `test/` | Mit `npm test` reproduzierbare Tests; der Integrationstest erzeugt vorab einen TLS Secure Context |
 | `examples/` | Importierbarer IMAP-Weiterleitungsflow mit Platzhaltern |
+| `.github/` | CI-Workflow und Dependabot-Konfiguration; nicht im npm-Paket |
 | [RELEASING.md](RELEASING.md) | Vorbereitung, Freigabe, Veroeffentlichung und Verifikation |
 
-`docs/` und `AGENTS.md` sind Repository-Dokumentation und gehoeren gemaess
+`docs/`, `AGENTS.md` und `.github/` sind Repository-Dateien und gehoeren gemaess
 `package.json.files` nicht zum npm-Paket. Sie koennen ohne neue Paketversion
 gepflegt werden. Nach kuenftigen Releases diesen Stand mit Datum, Commit,
 Tests und tatsaechlich bestaetigtem Veroeffentlichungsstatus aktualisieren.
