@@ -1,0 +1,27 @@
+# Woechentliche Pruefung der npm-Abhaengigkeiten und der verwendeten GitHub
+# Actions. Es gibt keine ignore-Regeln: Fuer Nodemailer kommen Minor- und
+# Patch-Updates ebenso als Pull Request wie Major-Updates; auch ein neues
+# Lockfile innerhalb des erlaubten Bereichs wird vorgeschlagen. Die CI fuehrt
+# npm test und npm audit auf jedem dieser Pull Requests aus.
+# Dependabot-Sicherheitsupdates sind eine Repository-Einstellung und werden
+# hier nicht konfiguriert.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Hebt die Untergrenze in package.json mit an (wie bei 1.0.1 und 1.0.2),
+    # statt den Bereich nur zu erweitern.
+    versioning-strategy: increase
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

@@ -207,6 +207,13 @@ Wenn `npm run pack:check` nicht verfuegbar ist:
 npm pack --dry-run
 ```
 
+Dieselben Pflichtpruefungen laufen automatisch in GitHub Actions
+(`.github/workflows/ci.yml`): bei jedem Push auf `main` und jedem Pull Request
+mit `npm ci`, `npm test`, `npm audit --audit-level=moderate` und
+`npm run pack:check` auf Node.js 22 und 24 sowie zusaetzlich 26. Dependabot
+(`.github/dependabot.yml`) prueft woechentlich Nodemailer und die verwendeten
+Actions. Ein gruener CI-Lauf ersetzt keinen Node-RED-Praxistest.
+
 Tests muessen insbesondere abdecken:
 
 - package.json-Metadaten

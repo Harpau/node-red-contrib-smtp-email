@@ -1,0 +1,32 @@
+# Pflichtpruefungen aus AGENTS.md (Testregeln) auf den unterstuetzten
+# Node.js-Linien. Der Workflow braucht keine Secrets und verwendet nur
+# actions/checkout und actions/setup-node mit gepinnten Major-Versionen.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 und 24 sind die aktuellen LTS-Linien, 26 die lokale Entwicklungsversion.
+        node-version: [22, 24, 26]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --audit-level=moderate
+      - run: npm run pack:check
