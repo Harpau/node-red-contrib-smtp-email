@@ -1,6 +1,6 @@
 # Projektstand fuer neue Chats
 
-Zuletzt bestaetigter Release-Stand: **25. Oktober 2026**.
+Zuletzt bestaetigter Release-Stand: **26. Oktober 2026**.
 
 Dieses Dokument bewahrt Entscheidungen und Pruefergebnisse. Es ersetzt keine
 aktuelle Git-, Registry- oder Sicherheitspruefung. Zuerst den Arbeitsbaum,
@@ -35,15 +35,17 @@ npm heruntergeladene Tarball war bytegleich mit dem getesteten Artefakt; es war
 erst rund drei Minuten nach dem Publish herunterladbar, waehrend die
 Registry-Metadaten bereits sichtbar waren.
 
-**Noch offen:** Die Node-RED Flow Library zeigte am 25. Oktober 2026 weiterhin
-Version 1.0.1. Der Katalog-Refresh (**check for update** nach Anmeldung auf der
-Paketseite) und die anschliessende Scorecard-Kontrolle fuer 1.0.2 stehen aus.
-Vor 1.0.2 waren alle Scorecard-Regeln gruen bis auf **P02 "Name matches
-repository"**; diese Pruefung ist in node-red-dev-cli deaktiviert und erscheint
-deshalb fuer jedes Paket rot. Das ist kein Paketfehler und nicht zu beheben.
-Nach dem Refresh diesen Absatz aktualisieren.
+Der Katalog-Refresh wurde am 26. Oktober 2026 nach Anmeldung auf der Paketseite
+ausgeloest. Die Node-RED Flow Library zeigte anschliessend **1.0.2** als
+Paketversion; die Scorecard-Seite nannte ebenfalls 1.0.2, als unterstuetzte
+Node-RED-Versionen 4.1.17 und 5.0.9 und eine Abhaengigkeit. Alle angezeigten
+Scorecard-Regeln einschliesslich **Dependencies use latest versions** trugen
+einen gruenen Haken. Die Regel **P02 "Name matches repository"** erscheint
+weiterhin rot; diese Pruefung ist in node-red-dev-cli deaktiviert und wird
+deshalb fuer jedes Paket so angezeigt. Das ist kein Paketfehler und nicht zu
+beheben.
 
-Weitere Veroeffentlichungsschritte sind fuer diesen Release nicht offen. Eine
+Fuer diesen Release sind keine Veroeffentlichungsschritte mehr offen. Eine
 spaetere Dokumentationsaenderung macht daraus keine erneute npm-Veroeffentlichung.
 Ob der heutige Arbeitsbaum sauber oder mit GitHub synchron ist, immer mit Git
 feststellen und nicht aus diesem Dokument ableiten.
