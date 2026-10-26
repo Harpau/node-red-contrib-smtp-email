@@ -67,7 +67,7 @@ npm audit
 4. Dieses Tarball in einer isolierten Node-RED-Umgebung mit lokalen
    SMTP-Testservern pruefen. Keine produktiven Flows, echten Zugangsdaten oder
    echten Empfaenger verwenden. Relevante Szenarien stehen in
-   [PROJECT_STATUS.md](PROJECT_STATUS.md#nachgewiesene-tests-fuer-101).
+   [PROJECT_STATUS.md](PROJECT_STATUS.md#nachgewiesene-tests-fuer-102).
    Runtime- und Node.js-Version sowie die tatsaechlich installierte
    Nodemailer-Version protokollieren. Testdienste anschliessend beenden.
 5. Ergebnis und Grenzen festhalten. Historische Testergebnisse nicht als
