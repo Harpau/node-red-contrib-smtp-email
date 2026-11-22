@@ -22,7 +22,7 @@
     "mail"
   ],
   "dependencies": {
-    "nodemailer": "^10.2.1"
+    "nodemailer": "^10.6.0"
   },
   "engines": {
     "node": ">=22.0.0",
